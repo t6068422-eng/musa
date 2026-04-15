@@ -6,7 +6,6 @@ import {
   Factory, 
   ShoppingCart, 
   BarChart3, 
-  LogOut, 
   Menu, 
   X,
   User as UserIcon,
@@ -38,11 +37,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile } = useAuth();
-
-  const handleLogout = async () => {
-    await auth.signOut();
-    navigate('/login');
-  };
 
   return (
     <div className="min-h-screen bg-background text-foreground flex">
@@ -80,7 +74,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 px-4 py-3 mb-4">
+          <div className="flex items-center gap-3 px-4 py-3">
             <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center">
               <UserIcon className="w-6 h-6 text-muted-foreground" />
             </div>
@@ -89,14 +83,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <span className="text-xs text-muted-foreground truncate capitalize">{profile?.role || 'Staff'}</span>
             </div>
           </div>
-          <Button 
-            variant="ghost" 
-            className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            onClick={handleLogout}
-          >
-            <LogOut className="w-5 h-5" />
-            <span>Logout</span>
-          </Button>
         </div>
       </aside>
 
@@ -154,10 +140,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   })}
                 </nav>
                 <div className="p-4 border-t border-border">
-                  <Button variant="ghost" className="w-full justify-start gap-3 text-destructive" onClick={handleLogout}>
-                    <LogOut className="w-5 h-5" />
-                    <span>Logout</span>
-                  </Button>
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center">
+                      <UserIcon className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <div className="flex flex-col overflow-hidden">
+                      <span className="text-sm font-medium truncate">{profile?.name || 'User'}</span>
+                      <span className="text-xs text-muted-foreground truncate capitalize">{profile?.role || 'Staff'}</span>
+                    </div>
+                  </div>
                 </div>
               </motion.aside>
             </>

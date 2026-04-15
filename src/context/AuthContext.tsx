@@ -20,44 +20,25 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Static default user for the entire application
+  const defaultUser = {
+    uid: 'default-admin',
+    email: 'admin@musatraders.com',
+    displayName: 'Musa Admin',
+  } as any;
 
-  useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      if (!firebaseUser) {
-        setProfile(null);
-        setLoading(false);
-      }
-    });
+  const defaultProfile: UserProfile = {
+    uid: 'default-admin',
+    email: 'admin@musatraders.com',
+    name: 'Musa Admin',
+    role: 'admin',
+  };
 
-    return () => unsubscribeAuth();
-  }, []);
+  const [user] = useState<User | null>(defaultUser);
+  const [profile] = useState<UserProfile | null>(defaultProfile);
+  const [loading] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
-
-    const unsubscribeProfile = onSnapshot(
-      doc(db, 'users', user.uid),
-      (docSnap) => {
-        if (docSnap.exists()) {
-          setProfile(docSnap.data() as UserProfile);
-        }
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error fetching user profile:", error);
-        setLoading(false);
-        handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
-      }
-    );
-
-    return () => unsubscribeProfile();
-  }, [user]);
-
-  const isAdmin = profile?.role === 'admin' || user?.email === 't6068422@gmail.com';
+  const isAdmin = true;
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, isAdmin }}>

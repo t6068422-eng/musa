@@ -23,18 +23,15 @@ service cloud.firestore {
     // Helper Functions
     // ===============================================================
     function isAuthenticated() {
-      return request.auth != null;
+      return true; // Login removed
     }
 
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return true; // Login removed
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-         (request.auth.token.email == "t6068422@gmail.com" && request.auth.token.email_verified == true));
+      return true; // Login removed
     }
 
     function hasRequiredFields(fields) {
@@ -75,8 +72,7 @@ service cloud.firestore {
       return hasRequiredFields(['productId', 'quantity', 'date', 'addedBy']) &&
              data.productId is string &&
              data.quantity is number && data.quantity > 0 &&
-             data.date is timestamp &&
-             data.addedBy == request.auth.uid;
+             data.date is timestamp;
     }
 
     function isValidSale(data) {
@@ -85,8 +81,7 @@ service cloud.firestore {
              data.quantity is number && data.quantity > 0 &&
              data.price is number && data.price >= 0 &&
              data.total is number &&
-             data.date is timestamp &&
-             data.soldBy == request.auth.uid;
+             data.date is timestamp;
     }
 
     // ===============================================================
@@ -94,42 +89,27 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
-      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     match /products/{productId} {
-      allow read: if isAuthenticated();
-      allow create: if isAdmin() && isValidProduct(request.resource.data);
-      allow update: if isAuthenticated() && isValidProduct(request.resource.data);
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     match /production/{productionId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidProduction(request.resource.data);
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     match /sales/{saleId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidSale(request.resource.data);
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     match /settings/{settingId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
     match /stockControlHistory/{historyId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.savedBy);
+      allow read, write: if true;
     }
     
     match /test/connection {

@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster } from '@/components/ui/sonner';
 import Layout from './components/Layout';
-import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
 import Production from './pages/Production';
@@ -16,48 +15,27 @@ import ActivityHistory from './pages/ActivityHistory';
 import StockControl from './pages/StockControl';
 import SavedData from './pages/SavedData';
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" />;
-  }
-
-  return <>{children}</>;
-};
-
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
       <Route
         path="/*"
         element={
-          <ProtectedRoute>
-            <Layout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/products" element={<Products />} />
-                <Route path="/production" element={<Production />} />
-                <Route path="/sales" element={<Sales />} />
-                <Route path="/stock-control" element={<StockControl />} />
-                <Route path="/saved-data" element={<SavedData />} />
-                <Route path="/prepared-stock" element={<PreparedStock />} />
-                <Route path="/available-stock" element={<AvailableStock />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/history" element={<ActivityHistory />} />
-                <Route path="*" element={<Navigate to="/" />} />
-              </Routes>
-            </Layout>
-          </ProtectedRoute>
+          <Layout>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/products" element={<Products />} />
+              <Route path="/production" element={<Production />} />
+              <Route path="/sales" element={<Sales />} />
+              <Route path="/stock-control" element={<StockControl />} />
+              <Route path="/saved-data" element={<SavedData />} />
+              <Route path="/prepared-stock" element={<PreparedStock />} />
+              <Route path="/available-stock" element={<AvailableStock />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/history" element={<ActivityHistory />} />
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </Layout>
         }
       />
     </Routes>

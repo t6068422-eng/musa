@@ -12,7 +12,8 @@ import {
   X,
   History,
   Eye,
-  User as UserIcon
+  User as UserIcon,
+  RefreshCw
 } from 'lucide-react';
 import { 
   collection, 
@@ -64,6 +65,13 @@ export default function StockControl() {
   const [newColumnName, setNewColumnName] = useState('');
   const [quickAddName, setQuickAddName] = useState('');
   const [recentHistory, setRecentHistory] = useState<any[]>([]);
+  const [editHistory, setEditHistory] = useState<{
+    description: string;
+    timestamp: number;
+    entries: Record<string, StockEntry>;
+    products: Product[];
+  }[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const { user, isAdmin, profile } = useAuth();
 
   useEffect(() => {
@@ -119,16 +127,48 @@ export default function StockControl() {
     };
   }, [user]);
 
+  const recordHistory = (description: string) => {
+    setEditHistory(prev => {
+      const newStep = {
+        description,
+        timestamp: Date.now(),
+        entries: JSON.parse(JSON.stringify(entries)),
+        products: JSON.parse(JSON.stringify(products))
+      };
+      return [newStep, ...prev].slice(0, 50); // Keep last 50 steps
+    });
+  };
+
+  const handleUndo = (index: number) => {
+    const step = editHistory[index];
+    if (!step) return;
+
+    setEntries(JSON.parse(JSON.stringify(step.entries)));
+    setProducts(JSON.parse(JSON.stringify(step.products)));
+    
+    // Remove all steps up to and including this one
+    setEditHistory(prev => prev.slice(index + 1));
+    toast.success(`Reverted to: ${step.description}`);
+  };
+
   const handleEntryChange = (productId: string, field: 'production' | 'qtySold' | 'preparedStock' | 'price', value: string) => {
     const numValue = value === '' ? 0 : Number(value);
+    const productName = products.find(p => p.id === productId)?.name || 'Product';
+    
+    recordHistory(`Change ${field} for ${productName}`);
+
     setEntries(prev => {
       const currentEntry = prev[productId];
       let newPreparedStock = currentEntry.preparedStock;
 
-      // If production changes, update preparedStock accordingly
+      // If production changes, update preparedStock ONLY if increasing
       if (field === 'production') {
         const diff = numValue - currentEntry.production;
-        newPreparedStock += diff;
+        if (diff > 0) {
+          newPreparedStock += diff;
+        }
+      } else if (field === 'preparedStock') {
+        newPreparedStock = numValue;
       }
 
       return {
@@ -143,10 +183,12 @@ export default function StockControl() {
   };
 
   const handleProductNameChange = (productId: string, newName: string) => {
+    recordHistory(`Rename product to ${newName}`);
     setProducts(prev => prev.map(p => p.id === productId ? { ...p, name: newName } : p));
   };
 
   const handleCustomFieldChange = (productId: string, columnName: string, value: string) => {
+    recordHistory(`Update ${columnName} for product`);
     setEntries(prev => ({
       ...prev,
       [productId]: {
@@ -364,14 +406,25 @@ export default function StockControl() {
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
-        <Button 
-          variant="outline" 
-          className="gap-2 border-green-800 text-green-800 hover:bg-green-50"
-          onClick={() => setIsAddColumnOpen(true)}
-        >
-          <PlusCircle className="w-4 h-4" />
-          Create Column
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50"
+            onClick={() => setIsHistoryOpen(true)}
+            disabled={editHistory.length === 0}
+          >
+            <History className="w-4 h-4" />
+            Undo / History ({editHistory.length})
+          </Button>
+          <Button 
+            variant="outline" 
+            className="gap-2 border-green-800 text-green-800 hover:bg-green-50"
+            onClick={() => setIsAddColumnOpen(true)}
+          >
+            <PlusCircle className="w-4 h-4" />
+            Create Column
+          </Button>
+        </div>
       </div>
 
       <Card className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
@@ -612,6 +665,50 @@ export default function StockControl() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddColumnOpen(false)}>Cancel</Button>
             <Button onClick={handleAddColumn} className="bg-green-800 hover:bg-green-900">Add Column</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit History / Undo Dialog */}
+      <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="w-5 h-5" />
+              Edit History
+            </DialogTitle>
+            <DialogDescription>
+              Select a step to revert the sheet to that state.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-2 py-4">
+            {editHistory.length === 0 ? (
+              <p className="text-center py-8 text-muted-foreground italic">No changes recorded yet.</p>
+            ) : (
+              editHistory.map((step, index) => (
+                <div 
+                  key={step.timestamp} 
+                  className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-accent/50 transition-colors group"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">{step.description}</span>
+                    <span className="text-xs text-muted-foreground">{format(step.timestamp, 'HH:mm:ss')}</span>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    className="gap-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                    onClick={() => handleUndo(index)}
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Undo to here
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsHistoryOpen(false)} className="w-full">Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
