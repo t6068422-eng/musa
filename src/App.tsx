@@ -48,7 +48,7 @@ export default function App() {
       <AuthProvider>
         <Router>
           <AppRoutes />
-          <Toaster position="top-right" />
+          <Toaster position="top-center" />
         </Router>
       </AuthProvider>
     </ErrorBoundary>

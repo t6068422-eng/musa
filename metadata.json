@@ -1,5 +1,5 @@
 {
   "name": "MUSA TRADERS",
-  "description": "Modern Inventory Management System with production tracking, sales management, and real-time stock calculation.",
+  "description": "Modern Inventory Management System with production tracking, sales management, and real-time stock calculation. Includes Vercel routing fix.",
   "requestFramePermissions": []
 }

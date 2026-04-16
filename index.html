@@ -7,27 +7,31 @@
     <script>
       // Nuclear fix for "Cannot set property fetch of #<Window> which has only a getter"
       (function() {
-        var _fetch = window.fetch;
         try {
-          Object.defineProperty(window, 'fetch', {
-            get: function() { return _fetch; },
-            set: function(v) { _fetch = v; },
-            configurable: true,
-            enumerable: true
-          });
-        } catch (e) {
-          console.warn("Could not redefine fetch on window, trying prototype...");
-          try {
-            var proto = Object.getPrototypeOf(window);
-            Object.defineProperty(proto, 'fetch', {
+          var _fetch = window.fetch;
+          if (!_fetch) return;
+          
+          var defineFetch = function(obj) {
+            Object.defineProperty(obj, 'fetch', {
               get: function() { return _fetch; },
               set: function(v) { _fetch = v; },
               configurable: true,
               enumerable: true
             });
-          } catch (e2) {
-            console.error("Critical: Failed to fix fetch property.");
+          };
+
+          try {
+            defineFetch(window);
+          } catch (e) {
+            console.warn("Could not redefine fetch on window, trying prototype...");
+            try {
+              defineFetch(Object.getPrototypeOf(window));
+            } catch (e2) {
+              console.error("Critical: Failed to fix fetch property.");
+            }
           }
+        } catch (globalError) {
+          console.error("Fetch fix global error:", globalError);
         }
       })();
     </script>

@@ -72,6 +72,7 @@ export default function StockControl() {
     products: Product[];
   }[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const { user, isAdmin, profile } = useAuth();
 
   useEffect(() => {
@@ -149,6 +150,20 @@ export default function StockControl() {
     // Remove all steps up to and including this one
     setEditHistory(prev => prev.slice(index + 1));
     toast.success(`Reverted to: ${step.description}`);
+  };
+
+  const handleClearInputs = () => {
+    recordHistory('Clear all production and sales inputs');
+    setEntries(prev => {
+      const reset = { ...prev };
+      Object.keys(reset).forEach(id => {
+        reset[id].production = 0;
+        reset[id].qtySold = 0;
+      });
+      return reset;
+    });
+    setIsClearConfirmOpen(false);
+    toast.success('Inputs cleared');
   };
 
   const handleEntryChange = (productId: string, field: 'production' | 'qtySold' | 'preparedStock' | 'price', value: string) => {
@@ -328,16 +343,6 @@ export default function StockControl() {
 
       toast.success('Stock control data saved successfully');
       
-      // Reset numeric entries (production/qtySold) but keep preparedStock as the new base
-      setEntries(prev => {
-        const reset = { ...prev };
-        Object.keys(reset).forEach(id => {
-          reset[id].production = 0;
-          reset[id].qtySold = 0;
-        });
-        return reset;
-      });
-      
     } catch (error: any) {
       console.error(error);
       toast.error('Failed to save stock control data');
@@ -418,6 +423,15 @@ export default function StockControl() {
             <History className="w-4 h-4" />
             <span className="hidden sm:inline">Undo / History</span>
             <span className="sm:hidden">Undo</span> ({editHistory.length})
+          </Button>
+          <Button 
+            variant="outline" 
+            className="flex-1 md:flex-none gap-2 border-red-200 text-red-600 hover:bg-red-50 h-11 md:h-10"
+            onClick={() => setIsClearConfirmOpen(true)}
+          >
+            <X className="w-4 h-4" />
+            <span className="hidden sm:inline">Clear Inputs</span>
+            <span className="sm:hidden">Clear</span>
           </Button>
           <Button 
             variant="outline" 
@@ -687,6 +701,25 @@ export default function StockControl() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddColumnOpen(false)}>Cancel</Button>
             <Button onClick={handleAddColumn} className="bg-green-800 hover:bg-green-900">Add Column</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear Confirmation Dialog */}
+      <Dialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="w-5 h-5" />
+              Clear All Inputs?
+            </DialogTitle>
+            <DialogDescription>
+              This will reset all Production and Qty Sold numbers to zero. This action can be undone using the History button.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-row gap-2 sm:justify-end">
+            <Button variant="outline" onClick={() => setIsClearConfirmOpen(false)} className="flex-1 sm:flex-none">Cancel</Button>
+            <Button onClick={handleClearInputs} className="bg-red-600 hover:bg-red-700 flex-1 sm:flex-none">Clear Everything</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
