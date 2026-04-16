@@ -51,12 +51,12 @@ export default function AvailableStock() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Available Stock</h2>
-          <p className="text-muted-foreground">Final stock display and inventory status.</p>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Available Stock</h2>
+          <p className="text-sm md:text-base text-muted-foreground">Final stock display and inventory status.</p>
         </div>
-        <Button onClick={handleExport} variant="outline" className="gap-2">
+        <Button onClick={handleExport} variant="outline" className="gap-2 w-full sm:w-auto">
           <Download className="w-4 h-4" /> Export CSV
         </Button>
       </div>
@@ -65,7 +65,7 @@ export default function AvailableStock() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input 
           placeholder="Search stock..." 
-          className="pl-10 bg-card/50" 
+          className="pl-10 bg-card/50 h-11" 
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
         />
@@ -78,36 +78,38 @@ export default function AvailableStock() {
             Inventory Status
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="text-right">Current Stock</TableHead>
-                <TableHead className="text-center">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProducts.map((product) => {
-                const status = getStatus(product);
-                return (
-                  <TableRow key={product.id}>
-                    <TableCell className="font-medium">{product.name}</TableCell>
-                    <TableCell>{product.category}</TableCell>
-                    <TableCell className="text-right font-bold">
-                      {product.currentStock} {product.unit}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={status.variant} className={status.label === 'Low Stock' ? 'text-orange-500 border-orange-500/50' : ''}>
-                        {status.label}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+        <CardContent className="p-0 md:p-6">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[150px]">Product Name</TableHead>
+                  <TableHead className="min-w-[120px]">Category</TableHead>
+                  <TableHead className="text-right min-w-[120px]">Current Stock</TableHead>
+                  <TableHead className="text-center min-w-[100px]">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProducts.map((product) => {
+                  const status = getStatus(product);
+                  return (
+                    <TableRow key={product.id}>
+                      <TableCell className="font-medium">{product.name}</TableCell>
+                      <TableCell>{product.category}</TableCell>
+                      <TableCell className="text-right font-bold">
+                        {product.currentStock} {product.unit}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={status.variant} className={status.label === 'Low Stock' ? 'text-orange-500 border-orange-500/50' : ''}>
+                          {status.label}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -197,11 +197,11 @@ export default function SavedData() {
                               Download CSV
                             </Button>
                           </div>
-                          <div className="rounded-md border">
-                            <Table>
+                          <div className="rounded-md border overflow-x-auto">
+                            <Table className="min-w-[800px]">
                               <TableHeader>
                                 <TableRow className="bg-accent/50">
-                                  <TableHead>Product</TableHead>
+                                  <TableHead className="sticky left-0 bg-accent/50 z-10">Product</TableHead>
                                   <TableHead className="text-center">Prepared</TableHead>
                                   <TableHead className="text-center">Production</TableHead>
                                   <TableHead className="text-center">Sold</TableHead>
@@ -209,14 +209,14 @@ export default function SavedData() {
                                   <TableHead className="text-center">Revenue</TableHead>
                                   <TableHead className="text-center">New Stock</TableHead>
                                   {record.customColumns.map(col => (
-                                    <TableHead key={col} className="text-center">{col}</TableHead>
+                                    <TableHead key={col} className="text-center min-w-[100px]">{col}</TableHead>
                                   ))}
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                   {record.entries.map((entry, idx) => (
                                     <TableRow key={idx}>
-                                      <TableCell className="font-medium">{entry.productName}</TableCell>
+                                      <TableCell className="font-medium sticky left-0 bg-background/80 backdrop-blur-sm z-10">{entry.productName}</TableCell>
                                       <TableCell className="text-center">{entry.preparedStock}</TableCell>
                                       <TableCell className="text-center">{entry.production}</TableCell>
                                       <TableCell className="text-center">{entry.qtySold}</TableCell>

@@ -315,59 +315,62 @@ export default function Sales() {
               Recent Sales Transactions
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Qty</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {salesLogs.length === 0 ? (
+          <CardContent className="p-0 md:p-6">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      No sales recorded yet.
-                    </TableCell>
+                    <TableHead className="min-w-[120px]">Date</TableHead>
+                    <TableHead className="min-w-[150px]">Product</TableHead>
+                    <TableHead>Qty</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                ) : (
-                  salesLogs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className="text-xs">
-                        {format(log.date.toDate(), 'MMM dd, HH:mm')}
-                      </TableCell>
-                      <TableCell className="font-medium">{log.productName}</TableCell>
-                      <TableCell>{log.quantity}</TableCell>
-                      <TableCell className="font-bold">${log.total.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handlePrintInvoice(log)}
-                            title="Print Invoice"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="text-destructive hover:bg-destructive/10"
-                            onClick={() => setLogToDelete(log)}
-                            title="Delete Sale"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {salesLogs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        No sales recorded yet.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    salesLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="text-xs">
+                          {format(log.date.toDate(), 'MMM dd, HH:mm')}
+                        </TableCell>
+                        <TableCell className="font-medium">{log.productName}</TableCell>
+                        <TableCell>{log.quantity}</TableCell>
+                        <TableCell className="font-bold">${log.total.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-10 w-10"
+                              onClick={() => handlePrintInvoice(log)}
+                              title="Print Invoice"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-destructive hover:bg-destructive/10 h-10 w-10"
+                              onClick={() => setLogToDelete(log)}
+                              title="Delete Sale"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
 

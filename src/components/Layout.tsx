@@ -87,10 +87,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Mobile Header */}
-      <div className="flex-1 flex flex-col">
-        <header className="md:hidden flex items-center justify-between p-4 border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-          <h1 className="text-lg font-bold tracking-tighter">MUSA TRADERS</h1>
-          <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(true)}>
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="md:hidden flex items-center justify-between p-4 border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-50">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground text-sm font-bold">
+              M
+            </div>
+            <h1 className="text-lg font-bold tracking-tighter">MUSA TRADERS</h1>
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(true)} className="h-10 w-10">
             <Menu className="w-6 h-6" />
           </Button>
         </header>

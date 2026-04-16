@@ -142,7 +142,7 @@ export default function Dashboard() {
         <p className="text-muted-foreground">Welcome back to MUSA TRADERS management console.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, i) => (
           <Card key={i} className="border-border/50 bg-card/50 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -158,13 +158,13 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4 border-border/50 bg-card/50 backdrop-blur-sm">
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
+        <Card className="lg:col-span-4 border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader>
             <CardTitle>Sales Revenue (Last 7 Days)</CardTitle>
           </CardHeader>
           <CardContent className="pl-2">
-            <div className="h-[300px]">
+            <div className="h-[250px] md:h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={recentSales}>
                   <defs>
@@ -210,7 +210,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="col-span-3 border-border/50 bg-card/50 backdrop-blur-sm">
+        <Card className="lg:col-span-3 border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader>
             <CardTitle>Low Stock Items</CardTitle>
           </CardHeader>

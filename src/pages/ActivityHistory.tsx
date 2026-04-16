@@ -94,53 +94,55 @@ export default function ActivityHistory() {
             Recent Actions
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Time</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead className="text-right">Quantity</TableHead>
-                <TableHead className="text-right">Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {activities.map((activity) => {
-                const isProduction = activity.type === 'production';
-                const userId = isProduction ? (activity as ProductionEntry).addedBy : (activity as SaleEntry).soldBy;
-                const userName = users[userId] || 'Unknown User';
-                
-                return (
-                  <TableRow key={activity.id}>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {format(activity.date.toDate(), 'MMM dd, HH:mm:ss')}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={isProduction ? "secondary" : "outline"} className="gap-1">
-                        {isProduction ? <Factory className="w-3 h-3" /> : <ShoppingCart className="w-3 h-3" />}
-                        {isProduction ? 'Production' : 'Sale'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <UserIcon className="w-3 h-3 text-muted-foreground" />
-                        <span className="text-sm">{userName}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium">{activity.productName}</TableCell>
-                    <TableCell className="text-right font-bold">
-                      {isProduction ? '+' : '-'}{activity.quantity}
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">
-                      {!isProduction && `$${(activity as SaleEntry).total.toLocaleString()}`}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+        <CardContent className="p-0 md:p-6">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[120px]">Time</TableHead>
+                  <TableHead className="min-w-[100px]">Type</TableHead>
+                  <TableHead className="min-w-[120px]">User</TableHead>
+                  <TableHead className="min-w-[150px]">Product</TableHead>
+                  <TableHead className="text-right">Quantity</TableHead>
+                  <TableHead className="text-right">Details</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activities.map((activity) => {
+                  const isProduction = activity.type === 'production';
+                  const userId = isProduction ? (activity as ProductionEntry).addedBy : (activity as SaleEntry).soldBy;
+                  const userName = users[userId] || 'Unknown User';
+                  
+                  return (
+                    <TableRow key={activity.id}>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {format(activity.date.toDate(), 'MMM dd, HH:mm:ss')}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={isProduction ? "secondary" : "outline"} className="gap-1 text-[10px]">
+                          {isProduction ? <Factory className="w-3 h-3" /> : <ShoppingCart className="w-3 h-3" />}
+                          {isProduction ? 'Production' : 'Sale'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <UserIcon className="w-3 h-3 text-muted-foreground" />
+                          <span className="text-sm">{userName}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium">{activity.productName}</TableCell>
+                      <TableCell className="text-right font-bold">
+                        {isProduction ? '+' : '-'}{activity.quantity}
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {!isProduction && `$${(activity as SaleEntry).total.toLocaleString()}`}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

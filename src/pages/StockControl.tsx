@@ -210,11 +210,12 @@ export default function StockControl() {
     try {
       const settingsRef = doc(db, 'settings', 'stockControl');
       const updatedColumns = [...customColumns, newColumnName.trim()];
+      // setDoc works offline and will sync when online
       await setDoc(settingsRef, { customColumns: updatedColumns }, { merge: true });
       setCustomColumns(updatedColumns);
       setNewColumnName('');
       setIsAddColumnOpen(false);
-      toast.success('Column added successfully');
+      toast.success('Column added (will sync when online)');
     } catch (error) {
       toast.error('Failed to add column');
     }
@@ -226,7 +227,7 @@ export default function StockControl() {
       const updatedColumns = customColumns.filter(c => c !== columnName);
       await setDoc(settingsRef, { customColumns: updatedColumns }, { merge: true });
       setCustomColumns(updatedColumns);
-      toast.success('Column removed');
+      toast.success('Column removed (will sync when online)');
     } catch (error) {
       toast.error('Failed to remove column');
     }
@@ -236,7 +237,8 @@ export default function StockControl() {
     if (!quickAddName.trim()) return;
     try {
       const productsRef = collection(db, 'products');
-      await setDoc(doc(productsRef), {
+      const newProductRef = doc(productsRef);
+      await setDoc(newProductRef, {
         name: quickAddName.trim(),
         category: 'General',
         unit: 'pcs',
@@ -246,7 +248,7 @@ export default function StockControl() {
         createdAt: Timestamp.now()
       });
       setQuickAddName('');
-      toast.success('Product added');
+      toast.success('Product added (will sync when online)');
     } catch (error) {
       toast.error('Failed to add product');
     }
@@ -381,59 +383,61 @@ export default function StockControl() {
   );
 
   return (
-    <div className="space-y-6 max-w-[95vw] mx-auto">
+    <div className="space-y-6 max-w-full md:max-w-[95vw] mx-auto pb-20 md:pb-6">
       {/* Header matching the image style */}
       <div className="border-2 border-green-800 rounded-lg overflow-hidden shadow-lg">
-        <div className="bg-[#38761d] text-white text-center py-2 font-bold text-xl border-b-2 border-green-800">
+        <div className="bg-[#38761d] text-white text-center py-2 font-bold text-lg md:text-xl border-b-2 border-green-800">
           MUSA TRADERS
         </div>
-        <div className="bg-[#38761d] text-white text-center py-1 font-bold border-b-2 border-green-800">
+        <div className="bg-[#38761d] text-white text-center py-1 font-bold text-sm md:text-base border-b-2 border-green-800">
           STOCK CONTROL SHEET
         </div>
-        <div className="grid grid-cols-2 bg-[#6aa84f] text-black font-bold">
+        <div className="grid grid-cols-2 bg-[#6aa84f] text-black font-bold text-sm md:text-base">
           <div className="border-r-2 border-green-800 py-1 text-center">DATE</div>
           <div className="py-1 text-center">{format(new Date(), 'dd-MMM-yy')}</div>
         </div>
       </div>
 
-      <div className="flex justify-between items-center gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4">
         <div className="relative w-full md:w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input 
             placeholder="Search products..." 
-            className="pl-10" 
+            className="pl-10 h-11 md:h-10" 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button 
             variant="outline" 
-            className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50"
+            className="flex-1 md:flex-none gap-2 border-orange-500 text-orange-600 hover:bg-orange-50 h-11 md:h-10"
             onClick={() => setIsHistoryOpen(true)}
             disabled={editHistory.length === 0}
           >
             <History className="w-4 h-4" />
-            Undo / History ({editHistory.length})
+            <span className="hidden sm:inline">Undo / History</span>
+            <span className="sm:hidden">Undo</span> ({editHistory.length})
           </Button>
           <Button 
             variant="outline" 
-            className="gap-2 border-green-800 text-green-800 hover:bg-green-50"
+            className="flex-1 md:flex-none gap-2 border-green-800 text-green-800 hover:bg-green-50 h-11 md:h-10"
             onClick={() => setIsAddColumnOpen(true)}
           >
             <PlusCircle className="w-4 h-4" />
-            Create Column
+            <span className="hidden sm:inline">Create Column</span>
+            <span className="sm:hidden">Column</span>
           </Button>
         </div>
       </div>
 
       <Card className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table className="border-collapse min-w-full">
+          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-green-800/20">
+            <Table className="border-collapse min-w-[800px] md:min-w-full">
               <TableHeader>
                 <TableRow className="bg-[#93c47d] hover:bg-[#93c47d] border-b-2 border-green-800">
-                  <TableHead className="text-black font-bold text-center border-r border-green-800 min-w-[150px]">Product</TableHead>
+                  <TableHead className="text-black font-bold text-center border-r border-green-800 min-w-[150px] sticky left-0 bg-[#93c47d] z-10">Product</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800">Prepared Stock</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800">Production</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800">Qty Sold</TableHead>
@@ -457,7 +461,7 @@ export default function StockControl() {
               <TableBody>
                 {filteredProducts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6 + customColumns.length} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8 + customColumns.length} className="text-center py-8 text-muted-foreground">
                       No products found.
                     </TableCell>
                   </TableRow>
@@ -470,9 +474,9 @@ export default function StockControl() {
                     
                     return (
                       <TableRow key={product.id} className="hover:bg-accent/5 border-b border-green-800/30">
-                        <TableCell className="font-bold text-left border-r border-green-800/30 p-1">
+                        <TableCell className="font-bold text-left border-r border-green-800/30 p-1 sticky left-0 bg-background/80 backdrop-blur-sm z-10">
                           <Input 
-                            className="w-full border-none bg-transparent focus-visible:ring-0 h-8 font-bold"
+                            className="w-full border-none bg-transparent focus-visible:ring-0 h-10 md:h-8 font-bold text-sm"
                             value={product.name}
                             onChange={(e) => handleProductNameChange(product.id, e.target.value)}
                           />
@@ -480,7 +484,7 @@ export default function StockControl() {
                         <TableCell className="text-center border-r border-green-800/30 p-1 bg-blue-50/30">
                           <Input 
                             type="number" 
-                            className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-8 font-bold text-blue-700"
+                            className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8 font-bold text-blue-700"
                             value={entry.preparedStock}
                             onChange={(e) => handleEntryChange(product.id, 'preparedStock', e.target.value)}
                           />
@@ -488,7 +492,7 @@ export default function StockControl() {
                         <TableCell className="text-center border-r border-green-800/30 p-1">
                           <Input 
                             type="number" 
-                            className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-8"
+                            className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8"
                             value={entry.production || ''}
                             onChange={(e) => handleEntryChange(product.id, 'production', e.target.value)}
                             placeholder="0"
@@ -497,7 +501,7 @@ export default function StockControl() {
                         <TableCell className="text-center border-r border-green-800/30 p-1">
                           <Input 
                             type="number" 
-                            className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-8"
+                            className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8"
                             value={entry.qtySold || ''}
                             onChange={(e) => handleEntryChange(product.id, 'qtySold', e.target.value)}
                             placeholder="0"
@@ -506,29 +510,29 @@ export default function StockControl() {
                         <TableCell className="text-center border-r border-green-800/30 p-1">
                           <Input 
                             type="number" 
-                            className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-8"
+                            className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8"
                             value={entry.price || ''}
                             onChange={(e) => handleEntryChange(product.id, 'price', e.target.value)}
                             placeholder="0"
                           />
                         </TableCell>
-                        <TableCell className="text-center border-r border-green-800/30 font-bold text-blue-600">
+                        <TableCell className="text-center border-r border-green-800/30 font-bold text-blue-600 text-sm">
                           ${revenue.toLocaleString()}
                         </TableCell>
-                        <TableCell className={`text-center border-r border-green-800/30 font-bold ${newStock < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                        <TableCell className={`text-center border-r border-green-800/30 font-bold text-sm ${newStock < 0 ? 'text-red-600' : 'text-green-700'}`}>
                           {newStock}
                         </TableCell>
                         <TableCell className="text-center border-r border-green-800/30">
                           {isLowStock ? (
-                            <Badge variant="destructive" className="text-[10px] h-5">LOW</Badge>
+                            <Badge variant="destructive" className="text-[10px] h-5 px-1">LOW</Badge>
                           ) : (
-                            <Badge variant="secondary" className="text-[10px] h-5 bg-green-100 text-green-800 hover:bg-green-100">OK</Badge>
+                            <Badge variant="secondary" className="text-[10px] h-5 px-1 bg-green-100 text-green-800 hover:bg-green-100">OK</Badge>
                           )}
                         </TableCell>
                         {customColumns.map(column => (
                           <TableCell key={column} className="text-center border-r border-green-800/30 p-1">
                             <Input 
-                              className="w-full mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-8"
+                              className="w-full mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8 text-sm"
                               value={entry.customFields[column] || ''}
                               onChange={(e) => handleCustomFieldChange(product.id, column, e.target.value)}
                               placeholder="..."
@@ -541,33 +545,51 @@ export default function StockControl() {
                 )}
                 {/* Quick Add Row */}
                 <TableRow className="bg-accent/5 border-t-2 border-green-800/20">
-                  <TableCell className="p-1 border-r border-green-800/30">
+                  <TableCell className="p-1 border-r border-green-800/30 sticky left-0 bg-background/80 backdrop-blur-sm z-10">
                     <div className="flex gap-2 items-center px-2">
                       <Input 
-                        placeholder="Quick add product..." 
+                        placeholder="Quick add..." 
                         value={quickAddName}
                         onChange={e => setQuickAddName(e.target.value)}
-                        className="h-8 text-sm border-dashed border-green-800/50"
+                        className="h-9 md:h-8 text-sm border-dashed border-green-800/50"
                         onKeyDown={e => e.key === 'Enter' && handleQuickAdd()}
                       />
-                      <Button size="sm" variant="ghost" onClick={handleQuickAdd} className="h-8 px-2 text-green-700 hover:bg-green-100">
+                      <Button size="sm" variant="ghost" onClick={handleQuickAdd} className="h-9 md:h-8 px-2 text-green-700 hover:bg-green-100">
                         <PlusCircle className="w-4 h-4" />
                       </Button>
                     </div>
                   </TableCell>
-                  <TableCell colSpan={5 + customColumns.length} className="bg-accent/5" />
+                  <TableCell colSpan={7 + customColumns.length} className="bg-accent/5" />
                 </TableRow>
               </TableBody>
             </Table>
           </div>
 
-          <div className="p-6 bg-accent/5 flex flex-col md:flex-row items-center justify-center gap-4 border-t border-green-800/30">
-            <p className="text-sm text-muted-foreground italic">
+          <div className="p-4 md:p-6 bg-accent/5 flex flex-col items-center justify-center gap-2 border-t border-green-800/30">
+            <p className="text-xs md:text-sm text-muted-foreground italic text-center">
               Use the "Save Data" button below to record your daily changes.
+            </p>
+            <p className="text-[10px] text-green-700 font-medium">
+              Works offline - data will sync automatically when reconnected.
             </p>
           </div>
         </CardContent>
       </Card>
+
+      {/* Floating Save Button for Mobile */}
+      <div className="fixed bottom-6 right-6 z-50 md:hidden">
+        <Button 
+          className="rounded-full w-14 h-14 shadow-2xl bg-[#38761d] hover:bg-[#2d5e17] text-white p-0"
+          onClick={handleSave}
+          disabled={loading}
+        >
+          {loading ? (
+            <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : (
+            <Save className="w-6 h-6" />
+          )}
+        </Button>
+      </div>
 
       {/* Recent Activity Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

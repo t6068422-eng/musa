@@ -68,12 +68,12 @@ export default function PreparedStock() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Prepared Stock</h2>
-          <p className="text-muted-foreground">View total stock prepared (Current Stock + Total Sales).</p>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Prepared Stock</h2>
+          <p className="text-sm md:text-base text-muted-foreground">View total stock prepared (Current Stock + Total Sales).</p>
         </div>
-        <Button onClick={handleExport} variant="outline" className="gap-2">
+        <Button onClick={handleExport} variant="outline" className="gap-2 w-full sm:w-auto">
           <Download className="w-4 h-4" /> Export CSV
         </Button>
       </div>
@@ -85,29 +85,31 @@ export default function PreparedStock() {
             Stock Preparation Overview
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="text-right">Current Stock</TableHead>
-                <TableHead className="text-right">Total Sales</TableHead>
-                <TableHead className="text-right font-bold text-primary">Prepared Stock</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {preparedStockData.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell>{item.category}</TableCell>
-                  <TableCell className="text-right">{item.currentStock} {item.unit}</TableCell>
-                  <TableCell className="text-right">{item.totalSales} {item.unit}</TableCell>
-                  <TableCell className="text-right font-bold text-primary">{item.preparedStock} {item.unit}</TableCell>
+        <CardContent className="p-0 md:p-6">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[150px]">Product Name</TableHead>
+                  <TableHead className="min-w-[120px]">Category</TableHead>
+                  <TableHead className="text-right min-w-[120px]">Current Stock</TableHead>
+                  <TableHead className="text-right min-w-[120px]">Total Sales</TableHead>
+                  <TableHead className="text-right font-bold text-primary min-w-[140px]">Prepared Stock</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {preparedStockData.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell>{item.category}</TableCell>
+                    <TableCell className="text-right">{item.currentStock} {item.unit}</TableCell>
+                    <TableCell className="text-right">{item.totalSales} {item.unit}</TableCell>
+                    <TableCell className="text-right font-bold text-primary">{item.preparedStock} {item.unit}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

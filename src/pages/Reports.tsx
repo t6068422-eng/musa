@@ -145,27 +145,30 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Reports & Analytics</h2>
-          <p className="text-muted-foreground">Deep dive into your production and sales performance.</p>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Reports & Analytics</h2>
+          <p className="text-sm md:text-base text-muted-foreground">Deep dive into your production and sales performance.</p>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Tabs value={period} onValueChange={(v: any) => setPeriod(v)} className="w-[300px]">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <Tabs value={period} onValueChange={(v: any) => setPeriod(v)} className="w-full sm:w-[300px]">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="daily">Daily</TabsTrigger>
               <TabsTrigger value="weekly">Weekly</TabsTrigger>
               <TabsTrigger value="monthly">Monthly</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button variant="outline" size="icon">
+          <Button variant="outline" size="icon" className="hidden sm:flex">
             <Download className="w-4 h-4" />
+          </Button>
+          <Button variant="outline" className="sm:hidden gap-2">
+            <Download className="w-4 h-4" /> Download
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>

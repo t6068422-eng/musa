@@ -213,83 +213,86 @@ export default function Products() {
       </div>
 
       <div className="border border-border/50 rounded-lg overflow-hidden bg-card/50 backdrop-blur-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Product Name</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Current Stock</TableHead>
-              {customColumns.map(col => (
-                <TableHead key={col}>{col}</TableHead>
-              ))}
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredProducts.length === 0 ? (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5 + customColumns.length} className="text-center py-8 text-muted-foreground">
-                  No products found.
-                </TableCell>
+                <TableHead className="min-w-[150px]">Product Name</TableHead>
+                <TableHead className="min-w-[120px]">Category</TableHead>
+                <TableHead className="min-w-[120px]">Current Stock</TableHead>
+                {customColumns.map(col => (
+                  <TableHead key={col} className="min-w-[100px]">{col}</TableHead>
+                ))}
+                <TableHead className="min-w-[100px]">Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : (
-              filteredProducts.map((product) => {
-                const isLowStock = product.currentStock <= product.minStockLevel;
-                return (
-                  <TableRow key={product.id}>
-                    <TableCell className="font-medium">{product.name}</TableCell>
-                    <TableCell>{product.category}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {product.currentStock} {product.unit}
-                        {isLowStock && <AlertCircle className="w-4 h-4 text-red-500" />}
-                      </div>
-                    </TableCell>
-                    {customColumns.map(col => (
-                      <TableCell key={col}>{product.customFields?.[col] || '-'}</TableCell>
-                    ))}
-                    <TableCell>
-                      <Badge variant={isLowStock ? "destructive" : "secondary"}>
-                        {isLowStock ? "Low Stock" : "In Stock"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => {
-                            setEditingProduct(product);
-                            setFormData({
-                              name: product.name,
-                              category: product.category,
-                              unit: product.unit,
-                              minStockLevel: product.minStockLevel,
-                              currentStock: product.currentStock
-                            });
-                          }}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        {isAdmin && (
+            </TableHeader>
+            <TableBody>
+              {filteredProducts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5 + customColumns.length} className="text-center py-8 text-muted-foreground">
+                    No products found.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredProducts.map((product) => {
+                  const isLowStock = product.currentStock <= product.minStockLevel;
+                  return (
+                    <TableRow key={product.id}>
+                      <TableCell className="font-medium">{product.name}</TableCell>
+                      <TableCell>{product.category}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {product.currentStock} {product.unit}
+                          {isLowStock && <AlertCircle className="w-4 h-4 text-red-500" />}
+                        </div>
+                      </TableCell>
+                      {customColumns.map(col => (
+                        <TableCell key={col}>{product.customFields?.[col] || '-'}</TableCell>
+                      ))}
+                      <TableCell>
+                        <Badge variant={isLowStock ? "destructive" : "secondary"}>
+                          {isLowStock ? "Low Stock" : "In Stock"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
                           <Button 
                             variant="ghost" 
-                            size="icon" 
-                            className="text-destructive hover:bg-destructive/10"
-                            onClick={() => setProductToDelete(product.id)}
+                            size="icon"
+                            className="h-10 w-10"
+                            onClick={() => {
+                              setEditingProduct(product);
+                              setFormData({
+                                name: product.name,
+                                category: product.category,
+                                unit: product.unit,
+                                minStockLevel: product.minStockLevel,
+                                currentStock: product.currentStock
+                              });
+                            }}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Edit2 className="w-4 h-4" />
                           </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+                          {isAdmin && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-destructive hover:bg-destructive/10 h-10 w-10"
+                              onClick={() => setProductToDelete(product.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {/* Delete Confirmation Dialog */}
