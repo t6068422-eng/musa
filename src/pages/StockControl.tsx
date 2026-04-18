@@ -90,21 +90,38 @@ export default function StockControl() {
 
     // Fetch Products
     const q = query(collection(db, 'products'), orderBy('name', 'asc'));
-    const unsubscribeProducts = onSnapshot(q, (snapshot) => {
+    const unsubscribeProducts = onSnapshot(q, async (snapshot) => {
       const productsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
       setProducts(productsData);
       
-      // Initialize entries if not already set
+      // Try to fetch today's data to restore session if it exists
+      const dayId = format(new Date(), 'yyyy-MM-dd');
+      const todayHistoryRef = doc(db, 'stockControlHistory', dayId);
+      const todaySnap = await getDoc(todayHistoryRef);
+      const todayData = todaySnap.exists() ? todaySnap.data() : null;
+      const todayEntries = todayData?.entries || [];
+      const entriesMap: Record<string, any> = {};
+      todayEntries.forEach((e: any) => {
+        entriesMap[e.productId] = e;
+      });
+
+      // Initialize entries
       setEntries(prev => {
         const updated: Record<string, StockEntry> = {};
         productsData.forEach(p => {
+          const restored = entriesMap[p.id];
+          
           updated[p.id] = {
             productId: p.id,
-            production: prev[p.id]?.production || 0,
-            qtySold: prev[p.id]?.qtySold || 0,
-            price: prev[p.id]?.price || 0,
-            preparedStock: prev[p.id]?.preparedStock !== undefined ? prev[p.id].preparedStock : p.currentStock,
-            customFields: { ...(p.customFields || {}), ...(prev[p.id]?.customFields || {}) }
+            production: restored ? restored.production : (prev[p.id]?.production || 0),
+            qtySold: restored ? restored.qtySold : (prev[p.id]?.qtySold || 0),
+            price: restored ? restored.price : (prev[p.id]?.price || 0),
+            preparedStock: restored ? restored.preparedStock : (prev[p.id]?.preparedStock !== undefined ? prev[p.id].preparedStock : p.currentStock),
+            customFields: { 
+              ...(p.customFields || {}), 
+              ...(restored?.customFields || {}),
+              ...(prev[p.id]?.customFields || {}) 
+            }
           };
         });
         return updated;
@@ -276,6 +293,7 @@ export default function StockControl() {
     try {
       const batch = writeBatch(db);
       const now = Timestamp.now();
+      const dayId = format(new Date(), 'yyyy-MM-dd');
       const productIds = Object.keys(entries);
       
       for (const productId of productIds) {
@@ -284,11 +302,13 @@ export default function StockControl() {
         if (!product) continue;
         
         const productRef = doc(db, 'products', productId);
+        // Important: newStock is calculated based on current UI numbers
         const newStock = entry.preparedStock - entry.qtySold;
 
-        // 1. Log Production if any
+        // 1. Log Production (Consolidated per day per product)
         if (entry.production > 0) {
-          const productionRef = doc(collection(db, 'production'));
+          const productionId = `${dayId}_${productId}`;
+          const productionRef = doc(db, 'production', productionId);
           batch.set(productionRef, {
             productId,
             productName: product.name,
@@ -298,9 +318,10 @@ export default function StockControl() {
           });
         }
 
-        // 2. Log Sale if any
+        // 2. Log Sale (Consolidated per day per product)
         if (entry.qtySold > 0) {
-          const saleRef = doc(collection(db, 'sales'));
+          const saleId = `${dayId}_${productId}`;
+          const saleRef = doc(db, 'sales', saleId);
           const total = entry.qtySold * entry.price;
           batch.set(saleRef, {
             productId,
@@ -321,8 +342,8 @@ export default function StockControl() {
         });
       }
 
-      // 4. Save History Record
-      const historyRef = doc(collection(db, 'stockControlHistory'));
+      // 4. Save History Record (One file per day)
+      const historyRef = doc(db, 'stockControlHistory', dayId);
       batch.set(historyRef, {
         date: now,
         savedBy: user.uid,
@@ -337,11 +358,11 @@ export default function StockControl() {
           productName: products.find(p => p.id === e.productId)?.name || 'Unknown'
         })),
         customColumns
-      });
+      }, { merge: true });
 
       await batch.commit();
 
-      toast.success('Stock control data saved successfully');
+      toast.success('Stock control data saved successfully (Daily record updated)');
       
     } catch (error: any) {
       console.error(error);
@@ -531,7 +552,7 @@ export default function StockControl() {
                           />
                         </TableCell>
                         <TableCell className="text-center border-r border-green-800/30 font-bold text-blue-600 text-sm">
-                          ${revenue.toLocaleString()}
+                          Rs. {revenue.toLocaleString()}
                         </TableCell>
                         <TableCell className={`text-center border-r border-green-800/30 font-bold text-sm ${newStock < 0 ? 'text-red-600' : 'text-green-700'}`}>
                           {newStock}

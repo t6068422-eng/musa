@@ -106,13 +106,13 @@ export default function Sales() {
               <tr>
                 <td>${sale.productName}</td>
                 <td>${sale.quantity}</td>
-                <td>$${sale.price.toLocaleString()}</td>
-                <td>$${sale.total.toLocaleString()}</td>
+                <td>Rs. ${sale.price.toLocaleString()}</td>
+                <td>Rs. ${sale.total.toLocaleString()}</td>
               </tr>
             </tbody>
           </table>
           <div class="total">
-            Total Amount: $${sale.total.toLocaleString()}
+            Total Amount: Rs. ${sale.total.toLocaleString()}
           </div>
           <div class="footer">
             <p>Thank you for your business!</p>
@@ -286,7 +286,7 @@ export default function Sales() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 rounded-lg bg-accent/50 border border-border/50">
                   <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total Amount</p>
-                  <p className="text-xl font-bold mt-1">${(formData.quantity * formData.price).toLocaleString()}</p>
+                  <p className="text-xl font-bold mt-1">Rs. {(formData.quantity * formData.price).toLocaleString()}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-accent/50 border border-border/50">
                   <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Stock After Sale</p>
@@ -342,7 +342,7 @@ export default function Sales() {
                         </TableCell>
                         <TableCell className="font-medium">{log.productName}</TableCell>
                         <TableCell>{log.quantity}</TableCell>
-                        <TableCell className="font-bold">${log.total.toLocaleString()}</TableCell>
+                        <TableCell className="font-bold">Rs. {log.total.toLocaleString()}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             <Button 
@@ -401,7 +401,7 @@ export default function Sales() {
             <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
               <p className="text-xs text-primary uppercase tracking-wider font-semibold">Revenue Today</p>
               <p className="text-2xl font-bold mt-1 text-primary">
-                ${salesLogs
+                Rs. {salesLogs
                   .filter(log => format(log.date.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd'))
                   .reduce((sum, log) => sum + log.total, 0).toLocaleString()}
               </p>
@@ -418,7 +418,7 @@ export default function Sales() {
               ).sort((a: any, b: any) => b[1] - a[1]).map(([name, total]: any) => (
                 <div key={name} className="flex justify-between text-sm">
                   <span className="text-muted-foreground">{name}</span>
-                  <span className="font-semibold">${total.toLocaleString()}</span>
+                  <span className="font-semibold">Rs. {total.toLocaleString()}</span>
                 </div>
               ))}
             </div>

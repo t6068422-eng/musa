@@ -175,7 +175,7 @@ export default function Reports() {
             <DollarSign className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold">Rs. {totalRevenue.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-1">
               For the selected {period} period
             </p>
@@ -266,7 +266,7 @@ export default function Reports() {
                     ))}
                   </Pie>
                   <Tooltip 
-                    formatter={(value: number) => `$${value.toLocaleString()}`}
+                    formatter={(value: number) => `Rs. ${value.toLocaleString()}`}
                     contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
                   />
                   <Legend />

@@ -135,7 +135,7 @@ export default function ActivityHistory() {
                         {isProduction ? '+' : '-'}{activity.quantity}
                       </TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">
-                        {!isProduction && `$${(activity as SaleEntry).total.toLocaleString()}`}
+                        {!isProduction && `Rs. ${(activity as SaleEntry).total.toLocaleString()}`}
                       </TableCell>
                     </TableRow>
                   );

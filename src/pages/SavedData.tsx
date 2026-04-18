@@ -220,8 +220,8 @@ export default function SavedData() {
                                       <TableCell className="text-center">{entry.preparedStock}</TableCell>
                                       <TableCell className="text-center">{entry.production}</TableCell>
                                       <TableCell className="text-center">{entry.qtySold}</TableCell>
-                                      <TableCell className="text-center">${(entry.price || 0).toLocaleString()}</TableCell>
-                                      <TableCell className="text-center font-bold text-blue-600">${(entry.qtySold * (entry.price || 0)).toLocaleString()}</TableCell>
+                                      <TableCell className="text-center">Rs. {(entry.price || 0).toLocaleString()}</TableCell>
+                                      <TableCell className="text-center font-bold text-blue-600">Rs. {(entry.qtySold * (entry.price || 0)).toLocaleString()}</TableCell>
                                       <TableCell className="text-center font-bold">{entry.preparedStock - entry.qtySold}</TableCell>
                                       {record.customColumns.map(col => (
                                         <TableCell key={col} className="text-center">{entry.customFields[col] || '-'}</TableCell>

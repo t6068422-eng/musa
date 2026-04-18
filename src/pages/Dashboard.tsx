@@ -120,8 +120,8 @@ export default function Dashboard() {
       bg: 'bg-orange-500/10'
     },
     {
-      title: 'Today\'s Sales',
-      value: `$${totalSalesToday.toLocaleString()}`,
+      title: "Today's Sales",
+      value: `Rs. ${totalSalesToday.toLocaleString()}`,
       icon: ShoppingCart,
       color: 'text-purple-500',
       bg: 'bg-purple-500/10'
@@ -186,7 +186,7 @@ export default function Dashboard() {
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) => `$${value}`}
+                    tickFormatter={(value) => `Rs.${value}`}
                   />
                   <Tooltip 
                     contentStyle={{ 
