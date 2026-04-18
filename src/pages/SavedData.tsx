@@ -214,20 +214,26 @@ export default function SavedData() {
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                  {record.entries.map((entry, idx) => (
-                                    <TableRow key={idx}>
-                                      <TableCell className="font-medium sticky left-0 bg-background/80 backdrop-blur-sm z-10">{entry.productName}</TableCell>
-                                      <TableCell className="text-center">{entry.preparedStock}</TableCell>
-                                      <TableCell className="text-center">{entry.production}</TableCell>
-                                      <TableCell className="text-center">{entry.qtySold}</TableCell>
-                                      <TableCell className="text-center">Rs. {(entry.price || 0).toLocaleString()}</TableCell>
-                                      <TableCell className="text-center font-bold text-blue-600">Rs. {(entry.qtySold * (entry.price || 0)).toLocaleString()}</TableCell>
-                                      <TableCell className="text-center font-bold">{entry.preparedStock - entry.qtySold}</TableCell>
-                                      {record.customColumns.map(col => (
-                                        <TableCell key={col} className="text-center">{entry.customFields[col] || '-'}</TableCell>
-                                      ))}
-                                    </TableRow>
-                                  ))}
+                                  {record.entries.map((entry, idx) => {
+                                    if (!entry) return null;
+                                    const prepared = entry.preparedStock || 0;
+                                    const sold = entry.qtySold || 0;
+                                    const price = entry.price || 0;
+                                    return (
+                                     <TableRow key={idx}>
+                                       <TableCell className="font-medium sticky left-0 bg-background/80 backdrop-blur-sm z-10">{entry.productName}</TableCell>
+                                       <TableCell className="text-center">{prepared}</TableCell>
+                                       <TableCell className="text-center">{entry.production || 0}</TableCell>
+                                       <TableCell className="text-center">{sold}</TableCell>
+                                       <TableCell className="text-center">Rs. {price.toLocaleString()}</TableCell>
+                                       <TableCell className="text-center font-bold text-blue-600">Rs. {(sold * price).toLocaleString()}</TableCell>
+                                       <TableCell className="text-center font-bold">{prepared - sold}</TableCell>
+                                       {record.customColumns.map(col => (
+                                         <TableCell key={col} className="text-center">{(entry.customFields && entry.customFields[col]) || '-'}</TableCell>
+                                       ))}
+                                     </TableRow>
+                                    );
+                                   })}
                               </TableBody>
                             </Table>
                           </div>

@@ -103,7 +103,21 @@ export default function StockControl() {
       if (snapshot.exists()) {
         const data = snapshot.data();
         if (data.entries) {
-          setEntries(data.entries);
+          // Filter out any broken or undefined entries from cloud
+          const validEntries: Record<string, StockEntry> = {};
+          Object.keys(data.entries).forEach(key => {
+            if (data.entries[key]) {
+              validEntries[key] = {
+                ...data.entries[key],
+                preparedStock: data.entries[key].preparedStock ?? 0,
+                production: data.entries[key].production ?? 0,
+                qtySold: data.entries[key].qtySold ?? 0,
+                price: data.entries[key].price ?? 0,
+                customFields: data.entries[key].customFields || {}
+              };
+            }
+          });
+          setEntries(validEntries);
         }
         if (data.customColumns) {
           setCustomColumns(data.customColumns);
@@ -344,12 +358,14 @@ export default function StockControl() {
       
       for (const productId of productIds) {
         const entry = entries[productId];
+        if (!entry) continue; // Safety guard
+        
         const product = products.find(p => p.id === productId);
         if (!product) continue;
         
         const productRef = doc(db, 'products', productId);
         // Important: newStock is calculated based on current UI numbers
-        const newStock = entry.preparedStock - entry.qtySold;
+        const newStock = (entry.preparedStock || 0) - (entry.qtySold || 0);
 
         // 1. Log Production (Consolidated per day per product)
         if (entry.production > 0) {
@@ -384,7 +400,7 @@ export default function StockControl() {
         batch.update(productRef, { 
           name: product.name,
           currentStock: newStock,
-          customFields: entry.customFields 
+          customFields: entry.customFields || {}
         });
       }
 
@@ -394,15 +410,19 @@ export default function StockControl() {
         date: now,
         savedBy: user.uid,
         savedByName: profile?.name || 'User',
-        entries: Object.values(entries).map((e: StockEntry) => ({
-          productId: e.productId,
-          production: e.production,
-          qtySold: e.qtySold,
-          price: e.price,
-          preparedStock: e.preparedStock,
-          customFields: e.customFields,
-          productName: products.find(p => p.id === e.productId)?.name || 'Unknown'
-        })),
+        entries: Object.keys(entries).map(pId => {
+          const e = entries[pId];
+          if (!e) return null;
+          return {
+            productId: e.productId,
+            production: e.production || 0,
+            qtySold: e.qtySold || 0,
+            price: e.price || 0,
+            preparedStock: e.preparedStock || 0,
+            customFields: e.customFields || {},
+            productName: products.find(p => p.id === e.productId)?.name || 'Unknown'
+          };
+        }).filter(Boolean),
         customColumns
       }, { merge: true });
 
