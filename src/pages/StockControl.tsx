@@ -13,7 +13,9 @@ import {
   History,
   Eye,
   User as UserIcon,
-  RefreshCw
+  RefreshCw,
+  ShoppingCart,
+  Package
 } from 'lucide-react';
 import { 
   collection, 
@@ -74,6 +76,10 @@ export default function StockControl() {
   }[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const [quickEntrySearch, setQuickEntrySearch] = useState('');
+  const [quickEntryProductId, setQuickEntryProductId] = useState('');
+  const [quickEntryProduction, setQuickEntryProduction] = useState('');
+  const [quickEntryQtySold, setQuickEntryQtySold] = useState('');
   const { user, isAdmin, profile } = useAuth();
 
   useEffect(() => {
@@ -356,6 +362,61 @@ export default function StockControl() {
     }
   };
 
+  const handleQuickEntryAdd = () => {
+    if (!quickEntryProductId) {
+      toast.error('Please select a product from the list');
+      return;
+    }
+
+    const prodAmount = Number(quickEntryProduction) || 0;
+    const soldAmount = Number(quickEntryQtySold) || 0;
+
+    if (prodAmount === 0 && soldAmount === 0) {
+      toast.error('Please enter production or sales amount');
+      return;
+    }
+
+    const product = products.find(p => p.id === quickEntryProductId);
+    if (!product) return;
+
+    recordHistory(`Quick add to ${product.name}: ${prodAmount} prod, ${soldAmount} sold`);
+
+    setEntries(prev => {
+      const currentEntry = prev[quickEntryProductId] || { 
+        productId: quickEntryProductId, 
+        production: 0, 
+        qtySold: 0, 
+        price: product.price || 0,
+        preparedStock: product.currentStock || 0,
+        customFields: {} 
+      };
+
+      const newProd = currentEntry.production + prodAmount;
+      const newSold = currentEntry.qtySold + soldAmount;
+      
+      // Calculate new preparedStock based on production change
+      // Since we are adding prodAmount, the diff is simply prodAmount
+      const newPreparedStock = Math.max(0, currentEntry.preparedStock + prodAmount);
+
+      return {
+        ...prev,
+        [quickEntryProductId]: {
+          ...currentEntry,
+          production: newProd,
+          qtySold: newSold,
+          preparedStock: newPreparedStock
+        }
+      };
+    });
+    
+    toast.success(`Updated ${product.name}: +${prodAmount} Prod, +${soldAmount} Sold`);
+    
+    setQuickEntryProduction('');
+    setQuickEntryQtySold('');
+    setQuickEntrySearch('');
+    setQuickEntryProductId('');
+  };
+
   const handleSave = async () => {
     if (!user) return;
     setLoading(true);
@@ -544,6 +605,73 @@ export default function StockControl() {
               </Button>
             </>
           )}
+        </div>
+      </div>
+
+      <div className="bg-green-100/50 p-3 rounded-xl border border-green-200 shadow-sm flex flex-col lg:flex-row items-center gap-4">
+        <div className="flex-1 w-full relative">
+          <div className="flex items-center gap-2">
+            <div className="bg-green-700 text-white p-2 rounded-lg shadow-inner">
+              <Package className="w-5 h-5" />
+            </div>
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-600" />
+              <Input 
+                list="quick-entry-products"
+                placeholder="Search/Select Product to add production or sales..." 
+                className="pl-10 h-11 border-green-300 focus-visible:ring-green-500 bg-white"
+                value={quickEntrySearch}
+                onChange={(e) => {
+                  setQuickEntrySearch(e.target.value);
+                  const p = products.find(prod => prod.name === e.target.value);
+                  if (p) setQuickEntryProductId(p.id);
+                  else setQuickEntryProductId('');
+                }}
+              />
+              <datalist id="quick-entry-products">
+                {products.map(p => <option key={p.id} value={p.name} />)}
+              </datalist>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-3 w-full lg:w-auto">
+          <div className="grid gap-1 flex-1">
+            <Label className="text-[10px] font-bold text-green-800 uppercase tracking-tighter">Production</Label>
+            <div className="relative">
+              <PlusCircle className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-green-600" />
+              <Input 
+                type="text" 
+                inputMode="decimal"
+                className="pl-7 w-full lg:w-28 h-10 border-green-300 font-bold text-green-700" 
+                placeholder="0"
+                value={quickEntryProduction}
+                onChange={e => setQuickEntryProduction(e.target.value)}
+              />
+            </div>
+          </div>
+          
+          <div className="grid gap-1 flex-1">
+            <Label className="text-[10px] font-bold text-red-800 uppercase tracking-tighter">Qty Sold</Label>
+            <div className="relative">
+              <ShoppingCart className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-red-600" />
+              <Input 
+                type="text" 
+                inputMode="decimal"
+                className="pl-7 w-full lg:w-28 h-10 border-red-200 font-bold text-red-700" 
+                placeholder="0"
+                value={quickEntryQtySold}
+                onChange={e => setQuickEntryQtySold(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <Button 
+            className="mt-5 lg:mt-5 bg-green-800 hover:bg-green-900 text-white shadow-md font-bold px-6 h-10"
+            onClick={handleQuickEntryAdd}
+          >
+            Update
+          </Button>
         </div>
       </div>
 
