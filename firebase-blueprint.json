@@ -93,6 +93,20 @@
         "customColumns": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["date", "savedBy", "savedByName", "entries"]
+    },
+    "MonthlyReport": {
+      "title": "MonthlyReport",
+      "description": "Aggregated monthly statistics",
+      "type": "object",
+      "properties": {
+        "month": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" },
+        "totalRevenue": { "type": "number" },
+        "totalProduction": { "type": "number" },
+        "totalSalesQty": { "type": "number" },
+        "saveCount": { "type": "number" }
+      },
+      "required": ["month", "lastUpdated", "totalRevenue", "totalProduction", "totalSalesQty"]
     }
   },
   "firestore": {
@@ -119,6 +133,10 @@
     "/stockControlHistory/{historyId}": {
       "schema": "StockControlHistory",
       "description": "Historical stock control records"
+    },
+    "/monthlyReports/{reportId}": {
+      "schema": "MonthlyReport",
+      "description": "Monthly performance summaries"
     }
   }
 }

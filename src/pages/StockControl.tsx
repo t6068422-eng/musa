@@ -28,7 +28,8 @@ import {
   updateDoc,
   setDoc,
   getDoc,
-  limit
+  limit,
+  increment
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
@@ -478,7 +479,7 @@ export default function StockControl() {
 
       // 4. Save History Record (One file per day)
       const historyRef = doc(db, 'stockControlHistory', dayId);
-      batch.set(historyRef, {
+      const historyData = {
         date: now,
         savedBy: user.uid,
         savedByName: profile?.name || 'User',
@@ -496,6 +497,32 @@ export default function StockControl() {
           };
         }).filter(Boolean),
         customColumns
+      };
+      batch.set(historyRef, historyData, { merge: true });
+
+      // 5. Update Monthly Report Summary
+      const monthlyId = format(new Date(), 'yyyy-MM');
+      const monthlyRef = doc(db, 'monthlyReports', monthlyId);
+      
+      const totalRevenue = Object.values(entries).reduce((sum, e) => sum + (e.qtySold * e.price), 0);
+      const totalProduction = Object.values(entries).reduce((sum, e) => sum + e.production, 0);
+      const totalSalesQty = Object.values(entries).reduce((sum, e) => sum + e.qtySold, 0);
+
+      // We use a separate update or get current monthly data to increment
+      // However, Firestore rules and batching might make this tricky if we don't have the current value
+      // A better way: monthlyReport will be a snapshot of the month so far by aggregating all history of the month
+      // but the user wants it to be "updated automatically" - we'll store aggregate stats.
+      // Since it's a batch, we can't easily increment without a prior get. 
+      // Instead, we will store everyday totals and let the dashboard aggregate for simplicity & reliability, 
+      // OR we just use increment() for the fields.
+      
+      batch.set(monthlyRef, {
+        month: monthlyId,
+        lastUpdated: now,
+        totalRevenue: increment(totalRevenue),
+        totalProduction: increment(totalProduction),
+        totalSalesQty: increment(totalSalesQty),
+        saveCount: increment(1)
       }, { merge: true });
 
       await batch.commit();

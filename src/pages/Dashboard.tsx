@@ -6,9 +6,11 @@ import {
   ShoppingCart,
   ArrowUpRight,
   ArrowDownRight,
-  Activity
+  Activity,
+  Calendar,
+  FileBarChart
 } from 'lucide-react';
-import { collection, query, where, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, orderBy, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Product, ProductionEntry, SaleEntry } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -23,15 +25,20 @@ import {
   Tooltip, 
   ResponsiveContainer,
   AreaChart,
-  Area
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  Legend
 } from 'recharts';
-import { startOfDay, endOfDay, subDays, format } from 'date-fns';
+import { startOfDay, endOfDay, subDays, format, startOfMonth } from 'date-fns';
 
 export default function Dashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [todayProduction, setTodayProduction] = useState<ProductionEntry[]>([]);
   const [todaySales, setTodaySales] = useState<SaleEntry[]>([]);
   const [recentSales, setRecentSales] = useState<any[]>([]);
+  const [monthlyStats, setMonthlyStats] = useState<any>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -92,11 +99,23 @@ export default function Dashboard() {
       handleFirestoreError(error, OperationType.LIST, 'sales (recent)');
     });
 
+    // Fetch Current Monthly Report
+    const currentMonthId = format(new Date(), 'yyyy-MM');
+    const monthlyRef = doc(db, 'monthlyReports', currentMonthId);
+    const unsubscribeMonthly = onSnapshot(monthlyRef, (doc) => {
+      if (doc.exists()) {
+        setMonthlyStats(doc.data());
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'monthlyReports');
+    });
+
     return () => {
       unsubscribeProducts();
       unsubscribeProduction();
       unsubscribeSales();
       unsubscribeRecent();
+      unsubscribeMonthly();
     };
   }, [user]);
 
@@ -160,6 +179,110 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
+        <Card className="lg:col-span-7 border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
+          <CardHeader className="bg-green-800/10 border-b border-green-800/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="bg-green-800 p-2 rounded-lg">
+                  <FileBarChart className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl">Monthly Report ({format(new Date(), 'MMMM yyyy')})</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">Updates automatically after every Save in Stock Control</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-bold text-green-800 uppercase tracking-widest">Live Summary</div>
+                <div className="text-[10px] text-muted-foreground">Last Save: {monthlyStats?.lastUpdated ? format(monthlyStats.lastUpdated.toDate(), 'HH:mm:ss') : 'N/A'}</div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6">
+            {!monthlyStats ? (
+              <div className="py-12 text-center">
+                <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-20" />
+                <p className="text-muted-foreground">No data for this month yet. Save data in Stock Control to see results.</p>
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-6">
+                  <div className="bg-background/40 p-4 rounded-xl border border-border/50">
+                    <h4 className="text-sm font-semibold text-muted-foreground mb-4 uppercase tracking-wider">Financial Performance</h4>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-end border-b border-border/50 pb-2">
+                        <span className="text-sm">Total Revenue</span>
+                        <span className="text-xl font-bold text-green-600">Rs. {monthlyStats.totalRevenue?.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-end border-b border-border/50 pb-2">
+                        <span className="text-sm">Total Sales Qty</span>
+                        <span className="text-xl font-bold text-purple-600">{monthlyStats.totalSalesQty?.toLocaleString()} <span className="text-xs font-normal">units</span></span>
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <span className="text-sm">Total Production</span>
+                        <span className="text-xl font-bold text-blue-600">{monthlyStats.totalProduction?.toLocaleString()} <span className="text-xs font-normal">units</span></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50/10 p-4 rounded-xl border border-blue-200/20">
+                    <div className="flex items-center gap-2 text-blue-800 mb-2">
+                      <Activity className="h-4 w-4" />
+                      <span className="text-sm font-bold">Stock Flow Efficiency</span>
+                    </div>
+                    <div className="text-3xl font-bold text-blue-900">
+                      {monthlyStats.totalProduction > 0 
+                        ? ((monthlyStats.totalSalesQty / monthlyStats.totalProduction) * 100).toFixed(1)
+                        : 0}%
+                    </div>
+                    <p className="text-[10px] text-blue-800/60 mt-1 italic">Sales-to-Production Ratio (SCR)</p>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-4 uppercase tracking-wider">Metrics Comparison</h4>
+                  <div className="h-[250px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={[
+                        { name: 'Production', value: monthlyStats.totalProduction, color: '#3b82f6' },
+                        { name: 'Sales Qty', value: monthlyStats.totalSalesQty, color: '#a855f7' },
+                        { name: 'Revenue (k)', value: monthlyStats.totalRevenue / 1000, color: '#22c55e' }
+                      ]}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis fontSize={12} tickLine={false} axisLine={false} />
+                        <Tooltip 
+                          cursor={{fill: 'rgba(0,0,0,0.05)'}}
+                          contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                        />
+                        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                          {[
+                            { color: '#3b82f6' },
+                            { color: '#a855f7' },
+                            { color: '#22c55e' }
+                          ].map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex justify-center gap-6 mt-2">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <div className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Production
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <div className="w-2.5 h-2.5 rounded-full bg-purple-500" /> Sales
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-500" /> Revenue (k)
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="lg:col-span-4 border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader>
             <CardTitle>Sales Revenue (Last 7 Days)</CardTitle>
