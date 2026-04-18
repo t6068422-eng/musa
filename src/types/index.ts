@@ -17,6 +17,7 @@ export interface Product {
   minStockLevel: number;
   currentStock: number;
   availableStock: number;
+  price?: number;
   customFields?: Record<string, any>;
   createdAt: Timestamp;
 }

@@ -107,12 +107,13 @@ export default function StockControl() {
           const validEntries: Record<string, StockEntry> = {};
           Object.keys(data.entries).forEach(key => {
             if (data.entries[key]) {
+              const product = products.find(p => p.id === key);
               validEntries[key] = {
                 ...data.entries[key],
-                preparedStock: data.entries[key].preparedStock ?? 0,
+                preparedStock: data.entries[key].preparedStock ?? (product?.currentStock || 0),
                 production: data.entries[key].production ?? 0,
                 qtySold: data.entries[key].qtySold ?? 0,
-                price: data.entries[key].price ?? 0,
+                price: data.entries[key].price ?? (product?.price || 0),
                 customFields: data.entries[key].customFields || {}
               };
             }
@@ -237,18 +238,16 @@ export default function StockControl() {
         productId,
         production: 0,
         qtySold: 0,
-        price: 0,
+        price: product?.price || 0,
         preparedStock: product?.currentStock || 0,
         customFields: {}
       };
       let newPreparedStock = currentEntry.preparedStock;
 
-      // If production changes, update preparedStock ONLY if increasing
+      // If production changes, update preparedStock proportionally (bi-directional)
       if (field === 'production') {
         const diff = numValue - currentEntry.production;
-        if (diff > 0) {
-          newPreparedStock += diff;
-        }
+        newPreparedStock = Math.max(0, newPreparedStock + diff);
       } else if (field === 'preparedStock') {
         newPreparedStock = numValue;
       }
@@ -337,6 +336,7 @@ export default function StockControl() {
         minStockLevel: 0,
         currentStock: 0,
         availableStock: 0,
+        price: 0,
         createdAt: Timestamp.now()
       });
       setQuickAddName('');
@@ -396,10 +396,11 @@ export default function StockControl() {
           });
         }
 
-        // 3. Update Product Stock, Name, and Custom Fields
+        // 3. Update Product Stock, Name, Price, and Custom Fields
         batch.update(productRef, { 
           name: product.name,
           currentStock: newStock,
+          price: Number(entry.price) || 0,
           customFields: entry.customFields || {}
         });
       }
@@ -588,7 +589,8 @@ export default function StockControl() {
                         </TableCell>
                         <TableCell className="text-center border-r border-green-800/30 p-1 bg-blue-50/30">
                           <Input 
-                            type="number" 
+                            type="text"
+                            inputMode="decimal"
                             className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8 font-bold text-blue-700"
                             value={entry.preparedStock}
                             onChange={(e) => handleEntryChange(product.id, 'preparedStock', e.target.value)}
@@ -596,27 +598,30 @@ export default function StockControl() {
                         </TableCell>
                         <TableCell className="text-center border-r border-green-800/30 p-1">
                           <Input 
-                            type="number" 
+                            type="text"
+                            inputMode="decimal"
                             className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8"
-                            value={entry.production || ''}
+                            value={entry.production === 0 ? '' : entry.production}
                             onChange={(e) => handleEntryChange(product.id, 'production', e.target.value)}
                             placeholder="0"
                           />
                         </TableCell>
                         <TableCell className="text-center border-r border-green-800/30 p-1">
                           <Input 
-                            type="number" 
+                            type="text"
+                            inputMode="decimal"
                             className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8"
-                            value={entry.qtySold || ''}
+                            value={entry.qtySold === 0 ? '' : entry.qtySold}
                             onChange={(e) => handleEntryChange(product.id, 'qtySold', e.target.value)}
                             placeholder="0"
                           />
                         </TableCell>
                         <TableCell className="text-center border-r border-green-800/30 p-1">
                           <Input 
-                            type="number" 
+                            type="text"
+                            inputMode="decimal"
                             className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8"
-                            value={entry.price || ''}
+                            value={entry.price === 0 ? '' : entry.price}
                             onChange={(e) => handleEntryChange(product.id, 'price', e.target.value)}
                             placeholder="0"
                           />

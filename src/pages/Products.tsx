@@ -61,7 +61,8 @@ export default function Products() {
     category: '',
     unit: '',
     minStockLevel: 0,
-    currentStock: 0
+    currentStock: 0,
+    price: 0
   });
 
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
@@ -99,12 +100,13 @@ export default function Products() {
         ...formData,
         minStockLevel: Number(formData.minStockLevel),
         currentStock: Number(formData.currentStock),
+        price: Number(formData.price),
         availableStock: 0, // Initialize available stock
         createdAt: Timestamp.now()
       });
       toast.success('Product added successfully');
       setIsAddDialogOpen(false);
-      setFormData({ name: '', category: '', unit: '', minStockLevel: 0, currentStock: 0 });
+      setFormData({ name: '', category: '', unit: '', minStockLevel: 0, currentStock: 0, price: 0 });
     } catch (error: any) {
       toast.error('Failed to add product');
     }
@@ -118,7 +120,8 @@ export default function Products() {
       await updateDoc(doc(db, 'products', editingProduct.id), {
         ...formData,
         minStockLevel: Number(formData.minStockLevel),
-        currentStock: Number(formData.currentStock)
+        currentStock: Number(formData.currentStock),
+        price: Number(formData.price)
       });
       toast.success('Product updated successfully');
       setEditingProduct(null);
@@ -187,6 +190,10 @@ export default function Products() {
                     <Label htmlFor="initialStock">Initial Stock</Label>
                     <Input id="initialStock" type="number" value={formData.currentStock} onChange={e => setFormData({...formData, currentStock: Number(e.target.value)})} required />
                   </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="price">Base Price (PKR)</Label>
+                    <Input id="price" type="number" value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} required />
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button type="submit">Save Product</Button>
@@ -220,6 +227,7 @@ export default function Products() {
                 <TableHead className="min-w-[150px]">Product Name</TableHead>
                 <TableHead className="min-w-[120px]">Category</TableHead>
                 <TableHead className="min-w-[120px]">Current Stock</TableHead>
+                <TableHead className="min-w-[100px]">Base Price</TableHead>
                 {customColumns.map(col => (
                   <TableHead key={col} className="min-w-[100px]">{col}</TableHead>
                 ))}
@@ -230,7 +238,7 @@ export default function Products() {
             <TableBody>
               {filteredProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5 + customColumns.length} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6 + customColumns.length} className="text-center py-8 text-muted-foreground">
                     No products found.
                   </TableCell>
                 </TableRow>
@@ -247,6 +255,7 @@ export default function Products() {
                           {isLowStock && <AlertCircle className="w-4 h-4 text-red-500" />}
                         </div>
                       </TableCell>
+                      <TableCell>Rs. {(product.price || 0).toLocaleString()}</TableCell>
                       {customColumns.map(col => (
                         <TableCell key={col}>{product.customFields?.[col] || '-'}</TableCell>
                       ))}
@@ -268,7 +277,8 @@ export default function Products() {
                                 category: product.category,
                                 unit: product.unit,
                                 minStockLevel: product.minStockLevel,
-                                currentStock: product.currentStock
+                                currentStock: product.currentStock,
+                                price: product.price || 0
                               });
                             }}
                           >
