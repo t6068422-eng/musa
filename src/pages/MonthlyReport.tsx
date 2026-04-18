@@ -12,7 +12,7 @@ import {
   ChevronRight,
   Filter
 } from 'lucide-react';
-import { collection, query, onSnapshot, doc, getDocs, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, getDocs, orderBy, Timestamp, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { MonthlyDetailedEntry, MonthlyReport } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -45,35 +45,70 @@ export default function MonthlyDetailedReport() {
     if (!user) return;
     setLoading(true);
 
-    // 1. Fetch Monthly Summary
-    const monthlyRef = doc(db, 'monthlyReports', monthId);
-    const unsubscribeSummary = onSnapshot(monthlyRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setSummary(docSnap.data() as MonthlyReport);
-      } else {
-        setSummary(null);
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `monthlyReports/${monthId}`);
-    });
+    const start = startOfMonth(reportDate);
+    const end = endOfMonth(reportDate);
+    
+    const q = query(
+      collection(db, 'stockControlHistory'),
+      where('date', '>=', Timestamp.fromDate(start)),
+      where('date', '<=', Timestamp.fromDate(end)),
+      orderBy('date', 'desc')
+    );
 
-    // 2. Fetch Product Stats Sub-collection
-    const statsRef = collection(db, 'monthlyReports', monthId, 'productStats');
-    const q = query(statsRef);
-    const unsubscribeStats = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as MonthlyDetailedEntry);
-      setProductStats(data);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const historyDocs = snapshot.docs.map(doc => doc.data());
+      
+      const productMap: Record<string, MonthlyDetailedEntry> = {};
+      
+      let totalRev = 0;
+      let totalProd = 0;
+      let totalSales = 0;
+
+      // Iterate chronologically or specifically to get the "latest" price correctly?
+      // Since we group by product, we just sum up.
+      historyDocs.forEach(h => {
+        (h.entries || []).forEach((e: any) => {
+          if (!productMap[e.productId]) {
+            productMap[e.productId] = {
+              productId: e.productId,
+              productName: e.productName || 'Unknown',
+              production: 0,
+              qtySold: 0,
+              revenue: 0,
+              price: e.price,
+              preparedStock: 0,
+              currentStock: 0 
+            };
+          }
+          productMap[e.productId].production += (e.production || 0);
+          productMap[e.productId].qtySold += (e.qtySold || 0);
+          productMap[e.productId].revenue += ((e.qtySold || 0) * (e.price || 0));
+          
+          totalRev += ((e.qtySold || 0) * (e.price || 0));
+          totalProd += (e.production || 0);
+          totalSales += (e.qtySold || 0);
+        });
+      });
+
+      setProductStats(Object.values(productMap).sort((a, b) => a.productName.localeCompare(b.productName)));
+      setSummary({
+        month: monthId,
+        totalRevenue: totalRev,
+        totalProduction: totalProd,
+        totalSalesQty: totalSales,
+        lastUpdated: historyDocs.length > 0 ? historyDocs[0].date : Timestamp.now(),
+        saveCount: historyDocs.length
+      });
       setLoading(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `monthlyReports/${monthId}/productStats`);
+      handleFirestoreError(error, OperationType.LIST, 'stockControlHistory');
       setLoading(false);
     });
 
     return () => {
-      unsubscribeSummary();
-      unsubscribeStats();
+      unsubscribe();
     };
-  }, [user, monthId]);
+  }, [user, reportDate]);
 
   const filteredStats = productStats.filter(s => 
     s.productName.toLowerCase().includes(searchTerm.toLowerCase())

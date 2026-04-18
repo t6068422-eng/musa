@@ -31,7 +31,7 @@ import {
   Cell,
   Legend
 } from 'recharts';
-import { startOfDay, endOfDay, subDays, format, startOfMonth } from 'date-fns';
+import { startOfDay, endOfDay, subDays, format, startOfMonth, endOfMonth } from 'date-fns';
 
 export default function Dashboard() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -99,15 +99,42 @@ export default function Dashboard() {
       handleFirestoreError(error, OperationType.LIST, 'sales (recent)');
     });
 
-    // Fetch Current Monthly Report
-    const currentMonthId = format(new Date(), 'yyyy-MM');
-    const monthlyRef = doc(db, 'monthlyReports', currentMonthId);
-    const unsubscribeMonthly = onSnapshot(monthlyRef, (doc) => {
-      if (doc.exists()) {
-        setMonthlyStats(doc.data());
-      }
+    // Fetch Current Monthly Report (Aggregated from History)
+    const now = new Date();
+    const startOfCurrMonth = startOfMonth(now);
+    const endOfCurrMonth = endOfMonth(now);
+    
+    const qMonthly = query(
+      collection(db, 'stockControlHistory'),
+      where('date', '>=', Timestamp.fromDate(startOfCurrMonth)),
+      where('date', '<=', Timestamp.fromDate(endOfCurrMonth))
+    );
+
+    const unsubscribeMonthly = onSnapshot(qMonthly, (snapshot) => {
+      const historyDocs = snapshot.docs.map(doc => doc.data());
+      
+      const totalRevenue = historyDocs.reduce((sum, doc) => {
+        return sum + (doc.entries || []).reduce((eSum: number, e: any) => eSum + (e.qtySold * e.price), 0);
+      }, 0);
+
+      const totalProduction = historyDocs.reduce((sum, doc) => {
+        return sum + (doc.entries || []).reduce((eSum: number, e: any) => eSum + e.production, 0);
+      }, 0);
+
+      const totalSalesQty = historyDocs.reduce((sum, doc) => {
+        return sum + (doc.entries || []).reduce((eSum: number, e: any) => eSum + e.qtySold, 0);
+      }, 0);
+
+      setMonthlyStats({
+        totalRevenue,
+        totalProduction,
+        totalSalesQty,
+        lastUpdated: historyDocs.length > 0 
+          ? historyDocs.sort((a, b) => b.date.seconds - a.date.seconds)[0].date 
+          : Timestamp.now()
+      });
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'monthlyReports');
+      handleFirestoreError(error, OperationType.LIST, 'stockControlHistory (monthly)');
     });
 
     return () => {

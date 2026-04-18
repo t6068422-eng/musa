@@ -501,53 +501,6 @@ export default function StockControl() {
       };
       batch.set(historyRef, historyData, { merge: true });
 
-      // 5. Update Monthly Report Summary
-      const monthlyId = format(new Date(), 'yyyy-MM');
-      const monthlyRef = doc(db, 'monthlyReports', monthlyId);
-      
-      const totalRevenue = Object.values(entries).reduce((sum, e) => sum + (e.qtySold * e.price), 0);
-      const totalProduction = Object.values(entries).reduce((sum, e) => sum + e.production, 0);
-      const totalSalesQty = Object.values(entries).reduce((sum, e) => sum + e.qtySold, 0);
-
-      // We use a separate update or get current monthly data to increment
-      // However, Firestore rules and batching might make this tricky if we don't have the current value
-      // A better way: monthlyReport will be a snapshot of the month so far by aggregating all history of the month
-      // but the user wants it to be "updated automatically" - we'll store aggregate stats.
-      // Since it's a batch, we can't easily increment without a prior get. 
-      // Instead, we will store everyday totals and let the dashboard aggregate for simplicity & reliability, 
-      // OR we just use increment() for the fields.
-      
-      batch.set(monthlyRef, {
-        month: monthlyId,
-        lastUpdated: now,
-        totalRevenue: increment(totalRevenue),
-        totalProduction: increment(totalProduction),
-        totalSalesQty: increment(totalSalesQty),
-        saveCount: increment(1)
-      }, { merge: true });
-
-      // 6. Update Per-Product Monthly Stats
-      for (const productId of productIds) {
-        const entry = entries[productId];
-        if (!entry) continue;
-        
-        const product = products.find(p => p.id === productId);
-        if (!product) continue;
-
-        const productMonthlyRef = doc(db, 'monthlyReports', monthlyId, 'productStats', productId);
-        batch.set(productMonthlyRef, {
-          productId,
-          productName: product.name,
-          production: increment(entry.production || 0),
-          qtySold: increment(entry.qtySold || 0),
-          revenue: increment((entry.qtySold || 0) * (entry.price || 0)),
-          preparedStock: entry.preparedStock, // Snapshot of latest
-          currentStock: (entry.preparedStock || 0) - (entry.qtySold || 0), // Snapshot of latest
-          price: entry.price, // Snapshot of latest
-          lastUpdated: now
-        }, { merge: true });
-      }
-
       await batch.commit();
 
       toast.success('Stock control data saved successfully (Daily record updated)');
@@ -633,16 +586,6 @@ export default function StockControl() {
             <span className="hidden sm:inline">Undo / History</span>
             <span className="sm:hidden">Undo</span> ({editHistory.length})
           </Button>
-          <Link to="/monthly-report" className="flex-1 md:flex-none">
-            <Button 
-              variant="outline" 
-              className="w-full gap-2 border-green-800 text-green-800 hover:bg-green-50 h-11 md:h-10"
-            >
-              <FileBarChart className="w-4 h-4" />
-              <span className="hidden sm:inline">Monthly Report</span>
-              <span className="sm:hidden">Report</span>
-            </Button>
-          </Link>
           {(isAdmin || user?.email === 't6068422@gmail.com') && (
             <>
               <Button 
