@@ -14,6 +14,7 @@ import AvailableStock from './pages/AvailableStock';
 import ActivityHistory from './pages/ActivityHistory';
 import StockControl from './pages/StockControl';
 import SavedData from './pages/SavedData';
+import MonthlyReport from './pages/MonthlyReport';
 
 function AppRoutes() {
   return (
@@ -29,6 +30,7 @@ function AppRoutes() {
               <Route path="/sales" element={<Sales />} />
               <Route path="/stock-control" element={<StockControl />} />
               <Route path="/saved-data" element={<SavedData />} />
+              <Route path="/monthly-report" element={<MonthlyReport />} />
               <Route path="/prepared-stock" element={<PreparedStock />} />
               <Route path="/available-stock" element={<AvailableStock />} />
               <Route path="/reports" element={<Reports />} />

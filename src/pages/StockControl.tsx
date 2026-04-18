@@ -12,6 +12,7 @@ import {
   X,
   History,
   Eye,
+  FileBarChart,
   User as UserIcon,
   RefreshCw,
   ShoppingCart,
@@ -525,6 +526,28 @@ export default function StockControl() {
         saveCount: increment(1)
       }, { merge: true });
 
+      // 6. Update Per-Product Monthly Stats
+      for (const productId of productIds) {
+        const entry = entries[productId];
+        if (!entry) continue;
+        
+        const product = products.find(p => p.id === productId);
+        if (!product) continue;
+
+        const productMonthlyRef = doc(db, 'monthlyReports', monthlyId, 'productStats', productId);
+        batch.set(productMonthlyRef, {
+          productId,
+          productName: product.name,
+          production: increment(entry.production || 0),
+          qtySold: increment(entry.qtySold || 0),
+          revenue: increment((entry.qtySold || 0) * (entry.price || 0)),
+          preparedStock: entry.preparedStock, // Snapshot of latest
+          currentStock: (entry.preparedStock || 0) - (entry.qtySold || 0), // Snapshot of latest
+          price: entry.price, // Snapshot of latest
+          lastUpdated: now
+        }, { merge: true });
+      }
+
       await batch.commit();
 
       toast.success('Stock control data saved successfully (Daily record updated)');
@@ -610,6 +633,16 @@ export default function StockControl() {
             <span className="hidden sm:inline">Undo / History</span>
             <span className="sm:hidden">Undo</span> ({editHistory.length})
           </Button>
+          <Link to="/monthly-report" className="flex-1 md:flex-none">
+            <Button 
+              variant="outline" 
+              className="w-full gap-2 border-green-800 text-green-800 hover:bg-green-50 h-11 md:h-10"
+            >
+              <FileBarChart className="w-4 h-4" />
+              <span className="hidden sm:inline">Monthly Report</span>
+              <span className="sm:hidden">Report</span>
+            </Button>
+          </Link>
           {(isAdmin || user?.email === 't6068422@gmail.com') && (
             <>
               <Button 

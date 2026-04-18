@@ -114,6 +114,10 @@ service cloud.firestore {
 
     match /monthlyReports/{reportId} {
       allow read, write: if true;
+      
+      match /productStats/{productId} {
+        allow read, write: if true;
+      }
     }
     
     match /test/connection {

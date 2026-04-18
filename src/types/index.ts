@@ -64,6 +64,26 @@ export interface SaleEntry {
   soldBy: string;
 }
 
+export interface MonthlyDetailedEntry {
+  productId: string;
+  productName: string;
+  production: number;
+  qtySold: number;
+  revenue: number;
+  preparedStock: number;
+  currentStock: number;
+  price: number;
+}
+
+export interface MonthlyReport {
+  month: string;
+  lastUpdated: Timestamp;
+  totalRevenue: number;
+  totalProduction: number;
+  totalSalesQty: number;
+  saveCount: number;
+}
+
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
