@@ -213,12 +213,20 @@ export default function StockControl() {
 
   const handleEntryChange = (productId: string, field: 'production' | 'qtySold' | 'preparedStock' | 'price', value: string) => {
     const numValue = value === '' ? 0 : Number(value);
-    const productName = products.find(p => p.id === productId)?.name || 'Product';
+    const product = products.find(p => p.id === productId);
+    const productName = product?.name || 'Product';
     
     recordHistory(`Change ${field} for ${productName}`);
 
     setEntries(prev => {
-      const currentEntry = prev[productId];
+      const currentEntry = prev[productId] || {
+        productId,
+        production: 0,
+        qtySold: 0,
+        price: 0,
+        preparedStock: product?.currentStock || 0,
+        customFields: {}
+      };
       let newPreparedStock = currentEntry.preparedStock;
 
       // If production changes, update preparedStock ONLY if increasing
@@ -249,16 +257,26 @@ export default function StockControl() {
 
   const handleCustomFieldChange = (productId: string, columnName: string, value: string) => {
     recordHistory(`Update ${columnName} for product`);
-    setEntries(prev => ({
-      ...prev,
-      [productId]: {
-        ...prev[productId],
-        customFields: {
-          ...prev[productId].customFields,
-          [columnName]: value
+    setEntries(prev => {
+      const currentEntry = prev[productId] || {
+        productId,
+        production: 0,
+        qtySold: 0,
+        price: 0,
+        preparedStock: products.find(p => p.id === productId)?.currentStock || 0,
+        customFields: {}
+      };
+      return {
+        ...prev,
+        [productId]: {
+          ...currentEntry,
+          customFields: {
+            ...currentEntry.customFields,
+            [columnName]: value
+          }
         }
-      }
-    }));
+      };
+    });
   };
 
   const handleAddColumn = async () => {
