@@ -90,44 +90,27 @@ export default function StockControl() {
 
     // Fetch Products
     const q = query(collection(db, 'products'), orderBy('name', 'asc'));
-    const unsubscribeProducts = onSnapshot(q, async (snapshot) => {
+    const unsubscribeProducts = onSnapshot(q, (snapshot) => {
       const productsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
       setProducts(productsData);
-      
-      // Try to fetch today's data to restore session if it exists
-      const dayId = format(new Date(), 'yyyy-MM-dd');
-      const todayHistoryRef = doc(db, 'stockControlHistory', dayId);
-      const todaySnap = await getDoc(todayHistoryRef);
-      const todayData = todaySnap.exists() ? todaySnap.data() : null;
-      const todayEntries = todayData?.entries || [];
-      const entriesMap: Record<string, any> = {};
-      todayEntries.forEach((e: any) => {
-        entriesMap[e.productId] = e;
-      });
-
-      // Initialize entries
-      setEntries(prev => {
-        const updated: Record<string, StockEntry> = {};
-        productsData.forEach(p => {
-          const restored = entriesMap[p.id];
-          
-          updated[p.id] = {
-            productId: p.id,
-            production: restored ? restored.production : (prev[p.id]?.production || 0),
-            qtySold: restored ? restored.qtySold : (prev[p.id]?.qtySold || 0),
-            price: restored ? restored.price : (prev[p.id]?.price || 0),
-            preparedStock: restored ? restored.preparedStock : (prev[p.id]?.preparedStock !== undefined ? prev[p.id].preparedStock : p.currentStock),
-            customFields: { 
-              ...(p.customFields || {}), 
-              ...(restored?.customFields || {}),
-              ...(prev[p.id]?.customFields || {}) 
-            }
-          };
-        });
-        return updated;
-      });
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');
+    });
+
+    // Subscriptions to the Collaborative Sheet (Live Draft)
+    const draftRef = doc(db, 'settings', 'stockControlDraft');
+    const unsubscribeDraft = onSnapshot(draftRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data.entries) {
+          setEntries(data.entries);
+        }
+        if (data.customColumns) {
+          setCustomColumns(data.customColumns);
+        }
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'settings/stockControlDraft');
     });
 
     // Fetch Recent History
@@ -141,9 +124,31 @@ export default function StockControl() {
     return () => {
       unsubscribeSettings();
       unsubscribeProducts();
+      unsubscribeDraft();
       unsubscribeHistory();
     };
   }, [user]);
+
+  // Sync entries to Firestore whenever they change locally (debounced)
+  useEffect(() => {
+    if (!user || products.length === 0) return;
+
+    const timeoutId = setTimeout(async () => {
+      const draftRef = doc(db, 'settings', 'stockControlDraft');
+      try {
+        await setDoc(draftRef, {
+          entries,
+          customColumns,
+          lastUpdated: Timestamp.now(),
+          updatedBy: user.uid
+        }, { merge: true });
+      } catch (error) {
+        console.error('Failed to sync stock control draft:', error);
+      }
+    }, 1000); // 1-second debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [entries, customColumns, user, products.length]);
 
   const recordHistory = (description: string) => {
     setEditHistory(prev => {
@@ -169,18 +174,41 @@ export default function StockControl() {
     toast.success(`Reverted to: ${step.description}`);
   };
 
-  const handleClearInputs = () => {
+  const handleClearInputs = async () => {
     recordHistory('Clear all production and sales inputs');
-    setEntries(prev => {
-      const reset = { ...prev };
-      Object.keys(reset).forEach(id => {
-        reset[id].production = 0;
-        reset[id].qtySold = 0;
-      });
-      return reset;
+    
+    const updated: Record<string, StockEntry> = {};
+    products.forEach(id => {
+      const pId = typeof id === 'object' ? id.id : id;
+      const product = products.find(p => p.id === pId);
+      if (!product) return;
+
+      updated[product.id] = {
+        productId: product.id,
+        production: 0,
+        qtySold: 0,
+        price: entries[product.id]?.price || 0,
+        preparedStock: product.currentStock,
+        customFields: Object.keys(entries[product.id]?.customFields || {}).reduce((acc, col) => ({...acc, [col]: ''}), {})
+      };
     });
+
+    setEntries(updated);
+    
+    // Explicitly update the cloud draft when clearing
+    const draftRef = doc(db, 'settings', 'stockControlDraft');
+    try {
+      await setDoc(draftRef, {
+        entries: updated,
+        lastUpdated: Timestamp.now(),
+        updatedBy: user?.uid
+      }, { merge: true });
+    } catch (error) {
+      console.error('Failed to clear stock control draft:', error);
+    }
+    
     setIsClearConfirmOpen(false);
-    toast.success('Inputs cleared');
+    toast.success('Fields cleared successfully (Cloud synced)');
   };
 
   const handleEntryChange = (productId: string, field: 'production' | 'qtySold' | 'preparedStock' | 'price', value: string) => {
@@ -445,24 +473,28 @@ export default function StockControl() {
             <span className="hidden sm:inline">Undo / History</span>
             <span className="sm:hidden">Undo</span> ({editHistory.length})
           </Button>
-          <Button 
-            variant="outline" 
-            className="flex-1 md:flex-none gap-2 border-red-200 text-red-600 hover:bg-red-50 h-11 md:h-10"
-            onClick={() => setIsClearConfirmOpen(true)}
-          >
-            <X className="w-4 h-4" />
-            <span className="hidden sm:inline">Clear Inputs</span>
-            <span className="sm:hidden">Clear</span>
-          </Button>
-          <Button 
-            variant="outline" 
-            className="flex-1 md:flex-none gap-2 border-green-800 text-green-800 hover:bg-green-50 h-11 md:h-10"
-            onClick={() => setIsAddColumnOpen(true)}
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span className="hidden sm:inline">Create Column</span>
-            <span className="sm:hidden">Column</span>
-          </Button>
+          {(isAdmin || user?.email === 't6068422@gmail.com') && (
+            <>
+              <Button 
+                variant="outline" 
+                className="flex-1 md:flex-none gap-2 border-red-200 text-red-600 hover:bg-red-50 h-11 md:h-10"
+                onClick={() => setIsClearConfirmOpen(true)}
+              >
+                <X className="w-4 h-4" />
+                <span className="hidden sm:inline">Clear Inputs</span>
+                <span className="sm:hidden">Clear</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                className="flex-1 md:flex-none gap-2 border-green-800 text-green-800 hover:bg-green-50 h-11 md:h-10"
+                onClick={() => setIsAddColumnOpen(true)}
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">Create Column</span>
+                <span className="sm:hidden">Column</span>
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
