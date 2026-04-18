@@ -23,6 +23,7 @@ import {
   query,
   orderBy,
   writeBatch,
+  updateDoc,
   setDoc,
   getDoc,
   limit
@@ -263,9 +264,18 @@ export default function StockControl() {
     });
   };
 
-  const handleProductNameChange = (productId: string, newName: string) => {
+  const handleProductNameChange = async (productId: string, newName: string) => {
     recordHistory(`Rename product to ${newName}`);
+    // Update locally for immediate feedback
     setProducts(prev => prev.map(p => p.id === productId ? { ...p, name: newName } : p));
+    
+    // Persist name change to Firestore
+    try {
+      const productRef = doc(db, 'products', productId);
+      await updateDoc(productRef, { name: newName });
+    } catch (error) {
+      console.error('Failed to update product name:', error);
+    }
   };
 
   const handleCustomFieldChange = (productId: string, columnName: string, value: string) => {

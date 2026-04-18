@@ -92,7 +92,8 @@ export default function Reports() {
       handleFirestoreError(error, OperationType.LIST, 'sales');
     });
 
-    const unsubscribeProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
+    const q_products = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const unsubscribeProducts = onSnapshot(q_products, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');

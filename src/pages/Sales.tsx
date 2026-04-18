@@ -137,14 +137,15 @@ export default function Sales() {
 
   useEffect(() => {
     if (!user) return;
-    const unsubscribeProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
+    const qProducts = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const unsubscribeProducts = onSnapshot(qProducts, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');
     });
 
-    const q = query(collection(db, 'sales'), orderBy('date', 'desc'), limit(50));
-    const unsubscribeLogs = onSnapshot(q, (snapshot) => {
+    const qSales = query(collection(db, 'sales'), orderBy('date', 'desc'), limit(50));
+    const unsubscribeLogs = onSnapshot(qSales, (snapshot) => {
       setSalesLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SaleEntry)));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'sales');

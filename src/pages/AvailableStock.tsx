@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { Product } from '../types';
@@ -19,7 +19,8 @@ export default function AvailableStock() {
 
   useEffect(() => {
     if (!user) return;
-    const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
+    const q = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');

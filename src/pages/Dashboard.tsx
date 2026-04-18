@@ -8,7 +8,7 @@ import {
   ArrowDownRight,
   Activity
 } from 'lucide-react';
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Product, ProductionEntry, SaleEntry } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -36,7 +36,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    const unsubscribeProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
+    const q_products = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const unsubscribeProducts = onSnapshot(q_products, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');
