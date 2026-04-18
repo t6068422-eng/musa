@@ -87,18 +87,14 @@ export default function MonthlyDetailedReport() {
   const nextMonth = () => setReportDate(prev => addMonths(prev, 1));
 
   const exportToCSV = () => {
-    const headers = ['Product', 'Prepared Stock', 'Production', 'Qty Sold', 'Price', 'Revenue', 'New Stock', 'Status'];
+    const headers = ['Product', 'Production', 'Qty Sold', 'Price', 'Revenue'];
     const rows = filteredStats.map(s => {
-      const status = s.currentStock <= 10 ? 'Low Stock' : 'Good';
       return [
         s.productName,
-        s.preparedStock,
         s.production,
         s.qtySold,
         s.price,
-        s.revenue,
-        s.currentStock,
-        status
+        s.revenue
       ];
     });
 
@@ -217,26 +213,23 @@ export default function MonthlyDetailedReport() {
               <TableHeader>
                 <TableRow className="bg-[#93c47d] hover:bg-[#93c47d] border-b-2 border-green-800">
                   <TableHead className="text-black font-bold border-r border-green-800/20">Product</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800/20">Prepared Stock</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800/20">Production</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800/20">Qty Sold</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800/20">Price</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800/20">Revenue</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800/20">New Stock</TableHead>
-                  <TableHead className="text-black font-bold text-center">Status</TableHead>
+                  <TableHead className="text-black font-bold text-center">Revenue</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-20 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
                       <Activity className="h-8 w-8 animate-spin mx-auto mb-2 opacity-20" />
                       Generating Monthly Report...
                     </TableCell>
                   </TableRow>
                 ) : filteredStats.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-20 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
                       No data found for this month.
                     </TableCell>
                   </TableRow>
@@ -244,9 +237,6 @@ export default function MonthlyDetailedReport() {
                   filteredStats.map((stat) => (
                     <TableRow key={stat.productId} className="hover:bg-green-50/30 border-b border-border/50">
                       <TableCell className="font-bold border-r border-border/50">{stat.productName}</TableCell>
-                      <TableCell className="text-center border-r border-border/50 bg-blue-50/10 font-medium">
-                        {stat.preparedStock}
-                      </TableCell>
                       <TableCell className="text-center border-r border-border/50 font-bold text-blue-700">
                         {stat.production}
                       </TableCell>
@@ -256,18 +246,8 @@ export default function MonthlyDetailedReport() {
                       <TableCell className="text-center border-r border-border/50 text-muted-foreground">
                         Rs. {stat.price}
                       </TableCell>
-                      <TableCell className="text-center border-r border-border/50 font-bold text-green-700">
+                      <TableCell className="text-center font-bold text-green-700">
                         Rs. {stat.revenue.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-center border-r border-border/50 font-bold">
-                        {stat.currentStock}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {stat.currentStock <= 10 ? (
-                          <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-tighter">Low Stock</span>
-                        ) : (
-                          <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 text-[10px] font-bold uppercase tracking-tighter">Stable</span>
-                        )}
                       </TableCell>
                     </TableRow>
                   ))
@@ -275,13 +255,10 @@ export default function MonthlyDetailedReport() {
                 {!loading && filteredStats.length > 0 && (
                   <TableRow className="bg-muted/50 font-bold">
                     <TableCell className="border-r border-border/50">TOTALS</TableCell>
-                    <TableCell className="text-center border-r border-border/50">-</TableCell>
                     <TableCell className="text-center border-r border-border/50 text-blue-800">{totalProduction.toLocaleString()}</TableCell>
                     <TableCell className="text-center border-r border-border/50 text-purple-800">{totalSalesQty.toLocaleString()}</TableCell>
                     <TableCell className="text-center border-r border-border/50">-</TableCell>
-                    <TableCell className="text-center border-r border-border/50 text-green-800">Rs. {totalRevenue.toLocaleString()}</TableCell>
-                    <TableCell className="text-center border-r border-border/50">-</TableCell>
-                    <TableCell className="text-center font-bold text-xs uppercase tracking-widest text-[#38761d]">Consolidated</TableCell>
+                    <TableCell className="text-center font-bold text-[#38761d]">Rs. {totalRevenue.toLocaleString()}</TableCell>
                   </TableRow>
                 )}
               </TableBody>
