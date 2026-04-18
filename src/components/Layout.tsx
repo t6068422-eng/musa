@@ -23,7 +23,7 @@ import { motion, AnimatePresence } from 'motion/react';
 const navItems = [
   { name: 'Dashboard', path: '/', icon: LayoutDashboard },
   { name: 'Stock Control', path: '/stock-control', icon: FileText },
-  { name: 'Monthly Report', path: '/monthly-report', icon: FileBarChart },
+  { name: 'Detailed Reports', path: '/monthly-report', icon: FileBarChart },
   { name: 'Saved Data', path: '/saved-data', icon: History },
   { name: 'Products', path: '/products', icon: Package },
   { name: 'Production', path: '/production', icon: Factory },

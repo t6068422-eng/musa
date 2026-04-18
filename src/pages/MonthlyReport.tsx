@@ -28,10 +28,26 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { format, subMonths, addMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  format, 
+  subMonths, 
+  addMonths, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfDay, 
+  endOfDay, 
+  startOfWeek, 
+  endOfWeek,
+  subDays,
+  addDays,
+  subWeeks,
+  addWeeks
+} from 'date-fns';
 import { Link } from 'react-router-dom';
 
-export default function MonthlyDetailedReport() {
+export default function DetailedReports() {
+  const [reportType, setReportType] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
   const [reportDate, setReportDate] = useState(new Date());
   const [productStats, setProductStats] = useState<MonthlyDetailedEntry[]>([]);
   const [summary, setSummary] = useState<MonthlyReport | null>(null);
@@ -39,76 +55,101 @@ export default function MonthlyDetailedReport() {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
-  const monthId = format(reportDate, 'yyyy-MM');
+  const getRange = () => {
+    if (reportType === 'daily') {
+      return { start: startOfDay(reportDate), end: endOfDay(reportDate) };
+    }
+    if (reportType === 'weekly') {
+      return { start: startOfWeek(reportDate), end: endOfWeek(reportDate) };
+    }
+    return { start: startOfMonth(reportDate), end: endOfMonth(reportDate) };
+  };
+
+  const getTimeLabel = () => {
+    if (reportType === 'daily') return format(reportDate, 'MMM dd, yyyy');
+    if (reportType === 'weekly') {
+      const { start, end } = getRange();
+      return `${format(start, 'MMM dd')} - ${format(end, 'MMM dd, yyyy')}`;
+    }
+    return format(reportDate, 'MMMM yyyy');
+  };
 
   useEffect(() => {
     if (!user) return;
     setLoading(true);
 
-    const start = startOfMonth(reportDate);
-    const end = endOfMonth(reportDate);
-    
-    const q = query(
-      collection(db, 'stockControlHistory'),
-      where('date', '>=', Timestamp.fromDate(start)),
-      where('date', '<=', Timestamp.fromDate(end)),
-      orderBy('date', 'desc')
-    );
+    const qProducts = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const unsubscribeProducts = onSnapshot(qProducts, (productSnapshot) => {
+      const allProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const historyDocs = snapshot.docs.map(doc => doc.data());
+      const { start, end } = getRange();
       
-      const productMap: Record<string, MonthlyDetailedEntry> = {};
-      
-      let totalRev = 0;
-      let totalProd = 0;
-      let totalSales = 0;
+      const qHistory = query(
+        collection(db, 'stockControlHistory'),
+        where('date', '>=', Timestamp.fromDate(start)),
+        where('date', '<=', Timestamp.fromDate(end)),
+        orderBy('date', 'desc')
+      );
 
-      // Iterate chronologically or specifically to get the "latest" price correctly?
-      // Since we group by product, we just sum up.
-      historyDocs.forEach(h => {
-        (h.entries || []).forEach((e: any) => {
-          if (!productMap[e.productId]) {
-            productMap[e.productId] = {
-              productId: e.productId,
-              productName: e.productName || 'Unknown',
-              production: 0,
-              qtySold: 0,
-              revenue: 0,
-              price: e.price,
-              preparedStock: 0,
-              currentStock: 0 
-            };
-          }
-          productMap[e.productId].production += (e.production || 0);
-          productMap[e.productId].qtySold += (e.qtySold || 0);
-          productMap[e.productId].revenue += ((e.qtySold || 0) * (e.price || 0));
-          
-          totalRev += ((e.qtySold || 0) * (e.price || 0));
-          totalProd += (e.production || 0);
-          totalSales += (e.qtySold || 0);
+      const unsubscribeHistory = onSnapshot(qHistory, (historySnapshot) => {
+        const historyDocs = historySnapshot.docs.map(doc => doc.data());
+        const productMap: Record<string, MonthlyDetailedEntry> = {};
+        let totalRev = 0;
+        let totalProd = 0;
+        let totalSales = 0;
+
+        historyDocs.forEach(h => {
+          (h.entries || []).forEach((e: any) => {
+            if (!productMap[e.productId]) {
+              productMap[e.productId] = {
+                productId: e.productId,
+                productName: e.productName || 'Unknown',
+                production: 0,
+                qtySold: 0,
+                revenue: 0,
+                price: e.price,
+                preparedStock: 0,
+                currentStock: 0 
+              };
+            }
+            productMap[e.productId].production += (e.production || 0);
+            productMap[e.productId].qtySold += (e.qtySold || 0);
+            productMap[e.productId].revenue += ((e.qtySold || 0) * (e.price || 0));
+            
+            totalRev += ((e.qtySold || 0) * (e.price || 0));
+            totalProd += (e.production || 0);
+            totalSales += (e.qtySold || 0);
+          });
         });
+
+        const sortedStats = allProducts
+          .map(p => productMap[p.id])
+          .filter(Boolean);
+
+        const deletedProducts = Object.values(productMap).filter(s => !allProducts.find(p => p.id === s.productId));
+        setProductStats([...sortedStats, ...deletedProducts]);
+        
+        setSummary({
+          month: format(reportDate, 'yyyy-MM'),
+          totalRevenue: totalRev,
+          totalProduction: totalProd,
+          totalSalesQty: totalSales,
+          lastUpdated: historyDocs.length > 0 ? historyDocs[0].date : Timestamp.now(),
+          saveCount: historyDocs.length
+        });
+        setLoading(false);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'stockControlHistory');
+        setLoading(false);
       });
 
-      setProductStats(Object.values(productMap).sort((a, b) => a.productName.localeCompare(b.productName)));
-      setSummary({
-        month: monthId,
-        totalRevenue: totalRev,
-        totalProduction: totalProd,
-        totalSalesQty: totalSales,
-        lastUpdated: historyDocs.length > 0 ? historyDocs[0].date : Timestamp.now(),
-        saveCount: historyDocs.length
-      });
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'stockControlHistory');
-      setLoading(false);
+      return () => unsubscribeHistory();
     });
 
     return () => {
-      unsubscribe();
+      unsubscribeProducts();
     };
-  }, [user, reportDate]);
+  }, [user, reportDate, reportType]);
 
   const filteredStats = productStats.filter(s => 
     s.productName.toLowerCase().includes(searchTerm.toLowerCase())
@@ -118,99 +159,106 @@ export default function MonthlyDetailedReport() {
   const totalSalesQty = filteredStats.reduce((sum, s) => sum + (s.qtySold || 0), 0);
   const totalRevenue = filteredStats.reduce((sum, s) => sum + (s.revenue || 0), 0);
 
-  const prevMonth = () => setReportDate(prev => subMonths(prev, 1));
-  const nextMonth = () => setReportDate(prev => addMonths(prev, 1));
+  const prev = () => {
+    if (reportType === 'daily') setReportDate(d => subDays(d, 1));
+    else if (reportType === 'weekly') setReportDate(d => subWeeks(d, 1));
+    else setReportDate(d => subMonths(d, 1));
+  };
+  const next = () => {
+    if (reportType === 'daily') setReportDate(d => addDays(d, 1));
+    else if (reportType === 'weekly') setReportDate(d => addWeeks(d, 1));
+    else setReportDate(d => addMonths(d, 1));
+  };
 
   const exportToCSV = () => {
     const headers = ['Product', 'Production', 'Qty Sold', 'Price', 'Revenue'];
-    const rows = filteredStats.map(s => {
-      return [
-        s.productName,
-        s.production,
-        s.qtySold,
-        s.price,
-        s.revenue
-      ];
-    });
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-
+    const rows = filteredStats.map(s => [s.productName, s.production, s.qtySold, s.price, s.revenue]);
+    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `Monthly_Report_${monthId}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
+    link.href = URL.createObjectURL(blob);
+    link.download = `${reportType}_Report_${format(reportDate, 'yyyy-MM-dd')}.csv`;
     link.click();
-    document.body.removeChild(link);
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <FileBarChart className="h-8 w-8 text-green-700" />
-            Detailed Monthly Report
+            Performance Reports
           </h2>
-          <p className="text-muted-foreground">Aggregated performance per product for the selected month.</p>
+          <p className="text-muted-foreground">Detailed breakdown of product performance.</p>
         </div>
-        <div className="flex items-center gap-2 bg-card border rounded-lg p-1 shadow-sm">
-          <Button variant="ghost" size="icon" onClick={prevMonth}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="px-4 font-bold text-sm min-w-[140px] text-center">
-            {format(reportDate, 'MMMM yyyy')}
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
+          <Tabs value={reportType} onValueChange={(v: any) => setReportType(v)} className="w-full sm:w-[300px]">
+            <TabsList className="grid w-full grid-cols-3 bg-secondary/30">
+              <TabsTrigger value="daily">Daily</TabsTrigger>
+              <TabsTrigger value="weekly">Weekly</TabsTrigger>
+              <TabsTrigger value="monthly">Monthly</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div className="flex items-center justify-between gap-2 bg-card border rounded-lg p-1 shadow-sm min-w-[200px]">
+            <Button variant="ghost" size="icon" onClick={prev}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="px-2 font-bold text-sm text-center">
+              {getTimeLabel()}
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={next} 
+              disabled={reportDate >= new Date()}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
-          <Button variant="ghost" size="icon" onClick={nextMonth} disabled={format(reportDate, 'yyyy-MM') === format(new Date(), 'yyyy-MM')}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-green-200 bg-green-50/30">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-green-800 uppercase tracking-widest flex items-center gap-2">
+          <CardHeader className="pb-2 text-green-800">
+            <div className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
               <TrendingUp className="h-3 w-3" /> Total Revenue
-            </CardTitle>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-900">Rs. {totalRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold">Rs. {totalRevenue.toLocaleString()}</div>
           </CardContent>
         </Card>
         <Card className="border-blue-200 bg-blue-50/30">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-blue-800 uppercase tracking-widest flex items-center gap-2">
+          <CardHeader className="pb-2 text-blue-800">
+            <div className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
               <Activity className="h-3 w-3" /> Total Production
-            </CardTitle>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-900">{totalProduction.toLocaleString()} units</div>
+            <div className="text-2xl font-bold">{totalProduction.toLocaleString()}</div>
           </CardContent>
         </Card>
         <Card className="border-purple-200 bg-purple-50/30">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-purple-800 uppercase tracking-widest flex items-center gap-2">
+          <CardHeader className="pb-2 text-purple-800">
+            <div className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
               <ShoppingCart className="h-3 w-3" /> Total Items Sold
-            </CardTitle>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-900">{totalSalesQty.toLocaleString()} items</div>
+            <div className="text-2xl font-bold">{totalSalesQty.toLocaleString()}</div>
           </CardContent>
         </Card>
         <Card className="border-orange-200 bg-orange-50/30">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-orange-800 uppercase tracking-widest flex items-center gap-2">
+          <CardHeader className="pb-2 text-orange-800">
+            <div className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
               <Package className="h-3 w-3" /> Active Products
-            </CardTitle>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-900">{filteredStats.length}</div>
+            <div className="text-2xl font-bold">{filteredStats.length}</div>
           </CardContent>
         </Card>
       </div>
@@ -230,7 +278,7 @@ export default function MonthlyDetailedReport() {
             <Download className="h-4 w-4" /> Export CSV
           </Button>
           <Link to="/stock-control" className="flex-1 md:flex-none">
-            <Button variant="ghost" className="w-full gap-2">
+            <Button variant="ghost" className="w-full gap-2 font-medium">
               Back to Stock Control
             </Button>
           </Link>
@@ -239,8 +287,8 @@ export default function MonthlyDetailedReport() {
 
       <Card className="border-border/50 bg-card/10 backdrop-blur-sm overflow-hidden shadow-xl">
         <div className="bg-[#38761d] text-white p-4 font-bold flex justify-between items-center border-b-2 border-green-900">
-          <span className="tracking-widest uppercase text-sm">Monthly Performance Sheet</span>
-          <span className="text-xs opacity-80">{format(reportDate, 'MMMM yyyy')}</span>
+          <span className="tracking-widest uppercase text-sm">{reportType} Performance Sheet</span>
+          <span className="text-xs opacity-80">{getTimeLabel()}</span>
         </div>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -259,13 +307,13 @@ export default function MonthlyDetailedReport() {
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
                       <Activity className="h-8 w-8 animate-spin mx-auto mb-2 opacity-20" />
-                      Generating Monthly Report...
+                      Generating {reportType} Report...
                     </TableCell>
                   </TableRow>
                 ) : filteredStats.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
-                      No data found for this month.
+                      No data found for this period.
                     </TableCell>
                   </TableRow>
                 ) : (
