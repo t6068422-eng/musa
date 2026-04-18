@@ -79,7 +79,7 @@ export default function Products() {
       handleFirestoreError(error, OperationType.GET, 'settings/stockControl');
     });
 
-    const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
     const unsubscribeProducts = onSnapshot(q, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
     }, (error) => {

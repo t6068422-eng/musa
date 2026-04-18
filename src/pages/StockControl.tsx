@@ -89,7 +89,7 @@ export default function StockControl() {
     });
 
     // Fetch Products
-    const q = query(collection(db, 'products'), orderBy('name', 'asc'));
+    const q = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
     const unsubscribeProducts = onSnapshot(q, (snapshot) => {
       const productsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
       setProducts(productsData);
