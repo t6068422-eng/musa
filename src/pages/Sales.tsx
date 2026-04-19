@@ -19,7 +19,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
-import { Product, SaleEntry } from '../types';
+import { Product, SaleEntry, Client } from '../types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -56,6 +56,7 @@ import { Printer } from 'lucide-react';
 export default function Sales() {
   const [products, setProducts] = useState<Product[]>([]);
   const [salesLogs, setSalesLogs] = useState<SaleEntry[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedSale, setSelectedSale] = useState<SaleEntry | null>(null);
   const { user } = useAuth();
@@ -129,6 +130,7 @@ export default function Sales() {
   // Form State
   const [formData, setFormData] = useState({
     productId: '',
+    clientId: 'none',
     quantity: 0,
     price: 0
   });
@@ -151,9 +153,17 @@ export default function Sales() {
       handleFirestoreError(error, OperationType.LIST, 'sales');
     });
 
+    const qClients = query(collection(db, 'clients'), orderBy('name', 'asc'));
+    const unsubscribeClients = onSnapshot(qClients, (snapshot) => {
+      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'clients');
+    });
+
     return () => {
       unsubscribeProducts();
       unsubscribeLogs();
+      unsubscribeClients();
     };
   }, [user]);
 
@@ -167,7 +177,19 @@ export default function Sales() {
       
       if (product) {
         // Revert the stock change (add back the sold quantity)
-        batch.update(productRef, { currentStock: product.currentStock + logToDelete.quantity });
+        batch.update(productRef, { currentStock: (product.currentStock || 0) + logToDelete.quantity });
+      }
+
+      // If sale had a client, revert their totals
+      if (logToDelete.clientId) {
+        const clientRef = doc(db, 'clients', logToDelete.clientId);
+        const client = clients.find(c => c.id === logToDelete.clientId);
+        if (client) {
+          batch.update(clientRef, {
+            totalSpent: Math.max(0, (client.totalSpent || 0) - logToDelete.total),
+            totalQuantity: Math.max(0, (client.totalQuantity || 0) - logToDelete.quantity)
+          });
+        }
       }
       
       batch.delete(doc(db, 'sales', logToDelete.id));
@@ -201,18 +223,36 @@ export default function Sales() {
       
       const newStock = selectedProduct.currentStock - Number(formData.quantity);
       const total = Number(formData.quantity) * Number(formData.price);
+      const now = Timestamp.now();
       
+      const selectedClient = clients.find(c => c.id === formData.clientId);
+
       // 1. Log the sale
       const saleRef = doc(collection(db, 'sales'));
-      batch.set(saleRef, {
+      const saleData: any = {
         productId: formData.productId,
         productName: selectedProduct.name,
         quantity: Number(formData.quantity),
         price: Number(formData.price),
         total: total,
-        date: Timestamp.now(),
+        date: now,
         soldBy: user.uid
-      });
+      };
+
+      if (selectedClient) {
+        saleData.clientId = selectedClient.id;
+        saleData.clientName = selectedClient.name;
+
+        // Update Client aggregator fields
+        const clientRef = doc(db, 'clients', selectedClient.id);
+        batch.update(clientRef, {
+          totalSpent: (selectedClient.totalSpent || 0) + total,
+          totalQuantity: (selectedClient.totalQuantity || 0) + Number(formData.quantity),
+          lastPurchaseDate: now
+        });
+      }
+
+      batch.set(saleRef, saleData);
 
       // 2. Update the product stock
       batch.update(productRef, { currentStock: newStock });
@@ -221,7 +261,7 @@ export default function Sales() {
 
       toast.success('Sale logged and stock updated');
       setIsAddDialogOpen(false);
-      setFormData({ productId: '', quantity: 0, price: 0 });
+      setFormData({ productId: '', clientId: '', quantity: 0, price: 0 });
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || 'Failed to log sale');
@@ -246,6 +286,22 @@ export default function Sales() {
               <DialogDescription>Enter the sales details. Stock will be automatically deducted.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleAddSale} className="space-y-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="client">Client (Optional)</Label>
+                <Select onValueChange={(value: string) => setFormData({...formData, clientId: value})} value={formData.clientId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a client (or Cash Customer)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">--- Cash Customer ---</SelectItem>
+                    {clients.map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name} ({c.phone})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="product">Product</Label>
                 <Select onValueChange={(value: string) => setFormData({...formData, productId: value})}>
@@ -323,6 +379,7 @@ export default function Sales() {
                   <TableRow>
                     <TableHead className="min-w-[120px]">Date</TableHead>
                     <TableHead className="min-w-[150px]">Product</TableHead>
+                    <TableHead>Client</TableHead>
                     <TableHead>Qty</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead className="text-right">Action</TableHead>
@@ -331,7 +388,7 @@ export default function Sales() {
                 <TableBody>
                   {salesLogs.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                         No sales recorded yet.
                       </TableCell>
                     </TableRow>
@@ -342,6 +399,7 @@ export default function Sales() {
                           {format(log.date.toDate(), 'MMM dd, HH:mm')}
                         </TableCell>
                         <TableCell className="font-medium">{log.productName}</TableCell>
+                        <TableCell className="text-xs">{log.clientName || 'Cash'}</TableCell>
                         <TableCell>{log.quantity}</TableCell>
                         <TableCell className="font-bold">Rs. {log.total.toLocaleString()}</TableCell>
                         <TableCell className="text-right">

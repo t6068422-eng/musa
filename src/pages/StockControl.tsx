@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Save, 
@@ -83,6 +83,7 @@ export default function StockControl() {
   const [quickEntryProduction, setQuickEntryProduction] = useState('');
   const [quickEntryQtySold, setQuickEntryQtySold] = useState('');
   const { user, isAdmin, profile } = useAuth();
+  const isLocalChange = useRef(false);
 
   useEffect(() => {
     if (!user) return;
@@ -111,8 +112,11 @@ export default function StockControl() {
     const unsubscribeDraft = onSnapshot(draftRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
+        
+        // Prevent infinite loop: Only update local state if the change came from another user
+        if (data.updatedBy === user.uid) return;
+
         if (data.entries) {
-          // Filter out any broken or undefined entries from cloud
           const validEntries: Record<string, StockEntry> = {};
           Object.keys(data.entries).forEach(key => {
             if (data.entries[key]) {
@@ -156,9 +160,14 @@ export default function StockControl() {
   // Sync entries to Firestore whenever they change locally (debounced)
   useEffect(() => {
     if (!user || products.length === 0) return;
+    if (!isLocalChange.current) return;
 
     const timeoutId = setTimeout(async () => {
       const draftRef = doc(db, 'settings', 'stockControlDraft');
+      // Reset the flag immediately to prevent re-triggering if the save fails or takes time
+      const wasLocalChange = isLocalChange.current;
+      isLocalChange.current = false;
+
       try {
         await setDoc(draftRef, {
           entries,
@@ -168,8 +177,10 @@ export default function StockControl() {
         }, { merge: true });
       } catch (error) {
         console.error('Failed to sync stock control draft:', error);
+        // If it failed, we could optionally set it back to true, but to save quota/noise 
+        // it's better to stay false until the NEXT user interaction.
       }
-    }, 1000); // 1-second debounce
+    }, 2000); // 2-second debounce
 
     return () => clearTimeout(timeoutId);
   }, [entries, customColumns, user, products.length]);
@@ -190,6 +201,7 @@ export default function StockControl() {
     const step = editHistory[index];
     if (!step) return;
 
+    isLocalChange.current = true;
     setEntries(JSON.parse(JSON.stringify(step.entries)));
     setProducts(JSON.parse(JSON.stringify(step.products)));
     
@@ -201,6 +213,7 @@ export default function StockControl() {
   const handleClearInputs = async () => {
     recordHistory('Clear all production and sales inputs');
     
+    isLocalChange.current = true;
     const updated: Record<string, StockEntry> = {};
     products.forEach(id => {
       const pId = typeof id === 'object' ? id.id : id;
@@ -241,6 +254,7 @@ export default function StockControl() {
     const productName = product?.name || 'Product';
     
     recordHistory(`Change ${field} for ${productName}`);
+    isLocalChange.current = true;
 
     setEntries(prev => {
       const currentEntry = prev[productId] || {
@@ -288,6 +302,7 @@ export default function StockControl() {
 
   const handleCustomFieldChange = (productId: string, columnName: string, value: string) => {
     recordHistory(`Update ${columnName} for product`);
+    isLocalChange.current = true;
     setEntries(prev => {
       const currentEntry = prev[productId] || {
         productId,
@@ -316,6 +331,7 @@ export default function StockControl() {
       return toast.error('Column already exists');
     }
 
+    isLocalChange.current = true;
     try {
       const settingsRef = doc(db, 'settings', 'stockControl');
       const updatedColumns = [...customColumns, newColumnName.trim()];
@@ -331,6 +347,7 @@ export default function StockControl() {
   };
 
   const handleRemoveColumn = async (columnName: string) => {
+    isLocalChange.current = true;
     try {
       const settingsRef = doc(db, 'settings', 'stockControl');
       const updatedColumns = customColumns.filter(c => c !== columnName);
@@ -382,6 +399,7 @@ export default function StockControl() {
     if (!product) return;
 
     recordHistory(`Quick add to ${product.name}: ${prodAmount} prod, ${soldAmount} sold`);
+    isLocalChange.current = true;
 
     setEntries(prev => {
       const currentEntry = prev[quickEntryProductId] || { 
@@ -486,7 +504,8 @@ export default function StockControl() {
         savedByName: profile?.name || 'User',
         entries: Object.keys(entries).map(pId => {
           const e = entries[pId];
-          if (!e) return null;
+          const product = products.find(p => p.id === pId);
+          if (!e || !product) return null; // Only save existing products
           return {
             productId: e.productId,
             production: e.production || 0,
@@ -494,7 +513,7 @@ export default function StockControl() {
             price: e.price || 0,
             preparedStock: e.preparedStock || 0,
             customFields: e.customFields || {},
-            productName: products.find(p => p.id === e.productId)?.name || 'Unknown'
+            productName: product.name
           };
         }).filter(Boolean),
         customColumns

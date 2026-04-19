@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { collection, query, where, onSnapshot, Timestamp, orderBy, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Product, ProductionEntry, SaleEntry } from '../types';
+import { Product, ProductionEntry, SaleEntry, Client } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [todaySales, setTodaySales] = useState<SaleEntry[]>([]);
   const [recentSales, setRecentSales] = useState<any[]>([]);
   const [monthlyStats, setMonthlyStats] = useState<any>(null);
+  const [clients, setClients] = useState<Client[]>([]);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -137,12 +138,20 @@ export default function Dashboard() {
       handleFirestoreError(error, OperationType.LIST, 'stockControlHistory (monthly)');
     });
 
+    const qClients = query(collection(db, 'clients'), orderBy('totalSpent', 'desc'));
+    const unsubscribeClients = onSnapshot(qClients, (snapshot) => {
+      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'clients');
+    });
+
     return () => {
       unsubscribeProducts();
       unsubscribeProduction();
       unsubscribeSales();
       unsubscribeRecent();
       unsubscribeMonthly();
+      unsubscribeClients();
     };
   }, [user]);
 
@@ -150,6 +159,7 @@ export default function Dashboard() {
   const totalProductionToday = todayProduction.reduce((sum, p) => sum + p.quantity, 0);
   const totalSalesToday = todaySales.reduce((sum, s) => sum + s.total, 0);
   const totalAvailableStock = products.reduce((sum, p) => sum + p.currentStock, 0);
+  const totalReceivables = clients.reduce((sum, c) => sum + (c.creditBalance || 0), 0);
 
   const stats = [
     {
@@ -160,8 +170,8 @@ export default function Dashboard() {
       bg: 'bg-blue-500/10'
     },
     {
-      title: 'Available Stock',
-      value: totalAvailableStock.toLocaleString(),
+      title: 'Total Clients',
+      value: clients.length,
       icon: Activity,
       color: 'text-orange-500',
       bg: 'bg-orange-500/10'
@@ -174,8 +184,8 @@ export default function Dashboard() {
       bg: 'bg-purple-500/10'
     },
     {
-      title: 'Low Stock Alerts',
-      value: lowStockItems.length,
+      title: 'Total Receivables',
+      value: `Rs. ${totalReceivables.toLocaleString()}`,
       icon: AlertTriangle,
       color: 'text-red-500',
       bg: 'bg-red-500/10'
@@ -363,25 +373,30 @@ export default function Dashboard() {
 
         <Card className="lg:col-span-3 border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle>Low Stock Items</CardTitle>
+            <CardTitle>Top Customers</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {lowStockItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground">All items are well stocked.</p>
+              {clients.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No customer records found.</p>
               ) : (
-                lowStockItems.slice(0, 5).map((item) => (
-                  <div key={item.id} className="flex items-center justify-between">
+                clients.slice(0, 5).map((client) => (
+                  <div key={client.id} className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <p className="text-sm font-medium leading-none">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">{item.category}</p>
+                      <p className="text-sm font-medium leading-none">{client.name}</p>
+                      <p className="text-xs text-muted-foreground">{client.phone}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-red-500">{item.currentStock} {item.unit}</p>
-                      <p className="text-[10px] text-muted-foreground">Min: {item.minStockLevel}</p>
+                      <p className="text-sm font-bold text-primary">Rs. {(client.totalSpent || 0).toLocaleString()}</p>
+                      <p className="text-[10px] text-muted-foreground">Bal: Rs. {(client.creditBalance || 0).toLocaleString()}</p>
                     </div>
                   </div>
                 ))
+              )}
+              {clients.length > 5 && (
+                <div className="pt-2 text-center">
+                  <p className="text-xs text-muted-foreground">And {clients.length - 5} more...</p>
+                </div>
               )}
             </div>
           </CardContent>

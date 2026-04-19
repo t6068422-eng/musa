@@ -29,6 +29,24 @@
       },
       "required": ["name", "category", "unit", "minStockLevel", "currentStock", "availableStock"]
     },
+    "Client": {
+      "title": "Client",
+      "description": "Client information for reporting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "creditBalance": { "type": "number" },
+        "totalSpent": { "type": "number" },
+        "totalQuantity": { "type": "number" },
+        "lastPurchaseDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "phone", "createdAt"]
+    },
     "AppSetting": {
       "title": "AppSetting",
       "description": "Global application settings",
@@ -63,7 +81,9 @@
         "price": { "type": "number" },
         "total": { "type": "number" },
         "date": { "type": "string", "format": "date-time" },
-        "soldBy": { "type": "string" }
+        "soldBy": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" }
       },
       "required": ["productId", "quantity", "price", "total", "date", "soldBy"]
     },
@@ -137,6 +157,10 @@
     "/settings/{settingId}": {
       "schema": "AppSetting",
       "description": "App configuration"
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Client database"
     },
     "/production/{productionId}": {
       "schema": "Production",

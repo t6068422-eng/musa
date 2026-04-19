@@ -126,8 +126,7 @@ export default function DetailedReports() {
           .map(p => productMap[p.id])
           .filter(Boolean);
 
-        const deletedProducts = Object.values(productMap).filter(s => !allProducts.find(p => p.id === s.productId));
-        setProductStats([...sortedStats, ...deletedProducts]);
+        setProductStats(sortedStats);
         
         setSummary({
           month: format(reportDate, 'yyyy-MM'),

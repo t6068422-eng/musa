@@ -22,6 +22,19 @@ export interface Product {
   createdAt: Timestamp;
 }
 
+export interface Client {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  creditBalance?: number;
+  createdAt: Timestamp;
+  lastPurchaseDate?: Timestamp;
+  totalSpent?: number;
+  totalQuantity?: number;
+}
+
 export interface AppSettings {
   customColumns: string[];
 }
@@ -62,6 +75,8 @@ export interface SaleEntry {
   total: number;
   date: Timestamp;
   soldBy: string;
+  clientId?: string;
+  clientName?: string;
 }
 
 export interface MonthlyDetailedEntry {

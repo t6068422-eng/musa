@@ -9,6 +9,7 @@ import {
   Menu, 
   X,
   User as UserIcon,
+  Users,
   Activity,
   History,
   FileText,
@@ -26,6 +27,7 @@ const navItems = [
   { name: 'Detailed Reports', path: '/monthly-report', icon: FileBarChart },
   { name: 'Saved Data', path: '/saved-data', icon: History },
   { name: 'Products', path: '/products', icon: Package },
+  { name: 'Clients', path: '/clients', icon: Users },
   { name: 'Production', path: '/production', icon: Factory },
   { name: 'Sales', path: '/sales', icon: ShoppingCart },
   { name: 'Prepared Stock', path: '/prepared-stock', icon: Activity },
@@ -53,7 +55,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </h1>
         </div>
         
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/10 hover:scrollbar-thumb-muted-foreground/20">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -126,7 +128,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <X className="w-6 h-6" />
                   </Button>
                 </div>
-                <nav className="flex-1 p-4 space-y-2">
+                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
                   {navItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = location.pathname === item.path;
