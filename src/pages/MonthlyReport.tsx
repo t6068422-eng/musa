@@ -12,7 +12,7 @@ import {
   ChevronRight,
   Filter
 } from 'lucide-react';
-import { collection, query, onSnapshot, doc, getDocs, orderBy, Timestamp, where } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, getDocs, orderBy, Timestamp, where, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { MonthlyDetailedEntry, MonthlyReport } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -109,13 +109,18 @@ export default function DetailedReports() {
       
       const qHistory = query(
         collection(db, 'stockControlHistory'),
-        where('date', '>=', Timestamp.fromDate(start)),
-        where('date', '<=', Timestamp.fromDate(end)),
-        orderBy('date', 'desc')
+        limit(500)
       );
 
       const unsubscribeHistory = onSnapshot(qHistory, (historySnapshot) => {
-        const historyDocs = historySnapshot.docs.map(doc => doc.data());
+        const { start, end } = getRange();
+        const historyDocs = historySnapshot.docs.map(doc => doc.data())
+          .filter(h => {
+             const d = h.date.toDate();
+             return d >= start && d <= end;
+          })
+          .sort((a, b) => b.date.seconds - a.date.seconds);
+
         const productMap: Record<string, MonthlyDetailedEntry> = {};
         let totalRev = 0;
         let totalProd = 0;
@@ -211,7 +216,7 @@ export default function DetailedReports() {
             <FileBarChart className="h-8 w-8 text-green-700" />
             Performance Reports
           </h2>
-          <p className="text-muted-foreground">Detailed breakdown of product performance.</p>
+          <p className="text-muted-foreground italic text-xs mt-1">Note: Detailed reports are generated from saved Stock Sheets in Stock Control.</p>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">

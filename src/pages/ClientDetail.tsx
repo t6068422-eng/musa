@@ -82,6 +82,7 @@ export default function ClientDetail() {
   const [editingSale, setEditingSale] = useState<SaleEntry | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<SaleEntry | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [undoStack, setUndoStack] = useState<any[]>([]);
   const { isAdmin } = useAuth();
 
   const downloadAsImage = () => {
@@ -259,6 +260,16 @@ export default function ClientDetail() {
       const newTotal = newQty * newPrice;
       const newDate = Timestamp.fromDate(new Date(editSaleData.date));
 
+      // Save for undo
+      setUndoStack(prev => [{
+        type: 'edit',
+        data: {
+          oldSale: { ...editingSale },
+          newSale: { ...editingSale, ...editSaleData, total: newTotal, productName: newProduct.name, date: newDate },
+          oldClientState: { ...client }
+        }
+      }, ...prev].slice(0, 10));
+
       // 1. Update Product Stock (Revert old, Apply new)
       if (editingSale.productId === editSaleData.productId) {
         const diff = newQty - editingSale.quantity;
@@ -318,6 +329,14 @@ export default function ClientDetail() {
     try {
       const batch = writeBatch(db);
       const product = products.find(p => p.id === saleToDelete.productId);
+      
+      // Save for Undo
+      setUndoStack(prev => [{
+        type: 'delete',
+        data: { ...saleToDelete },
+        oldClientState: { ...client }
+      }, ...prev].slice(0, 10));
+
       if (product) {
         const productRef = doc(db, 'products', saleToDelete.productId);
         batch.update(productRef, {
@@ -331,13 +350,60 @@ export default function ClientDetail() {
       });
       batch.delete(doc(db, 'sales', saleToDelete.id));
       await batch.commit();
-      toast.success('Purchase record deleted and stock reverted');
+      toast.success('Purchase record deleted');
       setSaleToDelete(null);
     } catch (error: any) {
       console.error(error);
       toast.error('Failed to delete record: ' + error.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (undoStack.length === 0 || !clientId) return;
+    const [lastAction, ...remainingStack] = undoStack;
+    
+    try {
+      if (lastAction.type === 'delete') {
+        const batch = writeBatch(db);
+        const sale = lastAction.data;
+        const saleRef = doc(db, 'sales', sale.id);
+        
+        batch.set(saleRef, sale);
+        
+        const clientRef = doc(db, 'clients', clientId);
+        batch.update(clientRef, lastAction.oldClientState);
+
+        const product = products.find(p => p.id === sale.productId);
+        if (product) {
+          const productRef = doc(db, 'products', sale.productId);
+          batch.update(productRef, { currentStock: Math.max(0, product.currentStock - sale.quantity) });
+        }
+
+        await batch.commit();
+        toast.success('Action reverted');
+      } else if (lastAction.type === 'edit') {
+        const batch = writeBatch(db);
+        const { oldSale, newSale, oldClientState } = lastAction.data;
+        
+        batch.update(doc(db, 'sales', oldSale.id), oldSale);
+        batch.update(doc(db, 'clients', clientId), oldClientState);
+        
+        const product = products.find(p => p.id === oldSale.productId);
+        if (product) {
+          const productRef = doc(db, 'products', oldSale.productId);
+          const stockDiff = newSale.quantity - oldSale.quantity;
+          batch.update(productRef, { currentStock: product.currentStock + stockDiff });
+        }
+
+        await batch.commit();
+        toast.success('Reverted purchase changes');
+      }
+      setUndoStack(remainingStack);
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to undo');
     }
   };
 
@@ -400,6 +466,14 @@ export default function ClientDetail() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50"
+            onClick={handleUndo}
+            disabled={undoStack.length === 0}
+          >
+            <History className="w-4 h-4" /> Undo ({undoStack.length})
+          </Button>
           <Button onClick={downloadAsImage} variant="outline" className="gap-2">
             <ImageIcon className="w-4 h-4" /> Download Picture
           </Button>

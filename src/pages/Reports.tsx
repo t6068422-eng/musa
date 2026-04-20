@@ -6,9 +6,11 @@ import {
   TrendingUp,
   TrendingDown,
   DollarSign,
-  Package
+  Package,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
-import { collection, query, where, onSnapshot, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { ProductionEntry, SaleEntry, Product } from '../types';
@@ -38,7 +40,13 @@ import {
   endOfMonth,
   format,
   eachDayOfInterval,
-  isSameDay
+  isSameDay,
+  subDays,
+  subWeeks,
+  subMonths,
+  addDays,
+  addWeeks,
+  addMonths
 } from 'date-fns';
 import { toPng } from 'html-to-image';
 import { toast } from 'sonner';
@@ -47,6 +55,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 export default function Reports() {
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [reportDate, setReportDate] = useState(new Date());
   const [productionData, setProductionData] = useState<ProductionEntry[]>([]);
   const [salesData, setSalesData] = useState<SaleEntry[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -76,50 +85,47 @@ export default function Reports() {
   useEffect(() => {
     if (!user) return;
     let start: Date, end: Date;
-    const now = new Date();
+    let chartStart: Date;
 
     if (period === 'daily') {
-      start = startOfDay(now);
-      end = endOfDay(now);
+      start = startOfDay(reportDate);
+      end = endOfDay(reportDate);
+      chartStart = startOfDay(subDays(reportDate, 6)); // 7 day trend ending at reportDate
     } else if (period === 'weekly') {
-      start = startOfWeek(now);
-      end = endOfWeek(now);
+      start = startOfWeek(reportDate);
+      end = endOfWeek(reportDate);
+      chartStart = startOfWeek(subWeeks(reportDate, 3)); // 4 week trend ending at reportDate
     } else {
-      start = startOfMonth(now);
-      end = endOfMonth(now);
+      start = startOfMonth(reportDate);
+      end = endOfMonth(reportDate);
+      chartStart = startOfMonth(reportDate);
     }
 
-    const qProduction = query(
-      collection(db, 'production'),
-      where('date', '>=', Timestamp.fromDate(start)),
-      where('date', '<=', Timestamp.fromDate(end)),
-      orderBy('date', 'asc')
-    );
-
-    const qSales = query(
-      collection(db, 'sales'),
-      where('date', '>=', Timestamp.fromDate(start)),
-      where('date', '<=', Timestamp.fromDate(end)),
-      orderBy('date', 'asc')
-    );
+    // We fetch from chartStart to encompass both trend and summary cards
+    const qProduction = query(collection(db, 'production'), limit(1000));
+    const qSales = query(collection(db, 'sales'), limit(1000));
 
     const unsubscribeProduction = onSnapshot(qProduction, (snapshot) => {
-      setProductionData(snapshot.docs.map(doc => doc.data() as ProductionEntry));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProductionEntry));
+      setProductionData(data.sort((a, b) => a.date.seconds - b.date.seconds));
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'production');
+      console.error(error);
+      toast.error('Failed to load production data');
     });
 
     const unsubscribeSales = onSnapshot(qSales, (snapshot) => {
-      setSalesData(snapshot.docs.map(doc => doc.data() as SaleEntry));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SaleEntry));
+      setSalesData(data.sort((a, b) => a.date.seconds - b.date.seconds));
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'sales');
+      console.error(error);
+      toast.error('Failed to load sales data');
     });
 
     const q_products = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
     const unsubscribeProducts = onSnapshot(q_products, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'products');
+      console.error(error);
     });
 
     return () => {
@@ -127,44 +133,133 @@ export default function Reports() {
       unsubscribeSales();
       unsubscribeProducts();
     };
-  }, [period, user]);
+  }, [period, reportDate, user]);
 
-  const totalRevenue = salesData.reduce((sum, s) => sum + s.total, 0);
-  const totalProduction = productionData.reduce((sum, p) => sum + p.quantity, 0);
-  const totalSalesQty = salesData.reduce((sum, s) => sum + s.quantity, 0);
+  const safeToDate = (timestamp: any): Date => {
+    if (!timestamp) return new Date();
+    if (timestamp instanceof Date) return timestamp;
+    if (typeof timestamp.toDate === 'function') return timestamp.toDate();
+    if (timestamp.seconds) return new Date(timestamp.seconds * 1000);
+    return new Date(timestamp);
+  };
+
+  const getSummaryRange = () => {
+    if (period === 'daily') return { start: startOfDay(reportDate), end: endOfDay(reportDate) };
+    if (period === 'weekly') return { start: startOfWeek(reportDate), end: endOfWeek(reportDate) };
+    return { start: startOfMonth(reportDate), end: endOfMonth(reportDate) };
+  };
+
+  const getTimeLabel = () => {
+    if (period === 'daily') return format(reportDate, 'MMM dd, yyyy');
+    if (period === 'weekly') {
+      const { start, end } = getSummaryRange();
+      return `${format(start, 'MMM dd')} - ${format(end, 'MMM dd, yyyy')}`;
+    }
+    return format(reportDate, 'MMMM yyyy');
+  };
+
+  const { start: sumStart, end: sumEnd } = getSummaryRange();
+
+  // For charts, we use a broader range
+  const chartRange = () => {
+    let start: Date;
+    if (period === 'daily') start = startOfDay(subDays(reportDate, 6));
+    else if (period === 'weekly') start = startOfWeek(subWeeks(reportDate, 3));
+    else start = startOfMonth(reportDate);
+    return { start, end: endOfDay(reportDate) };
+  };
+  const { start: cStart, end: cEnd } = chartRange();
+
+  const filteredSalesForSummary = salesData.filter(s => {
+    const d = safeToDate(s.date);
+    return d >= sumStart && d <= sumEnd;
+  });
+
+  const filteredProdForSummary = productionData.filter(p => {
+    const d = safeToDate(p.date);
+    return d >= sumStart && d <= sumEnd;
+  });
+
+  const filteredSalesForChart = salesData.filter(s => {
+    const d = safeToDate(s.date);
+    return d >= cStart && d <= cEnd;
+  });
+
+  const filteredProdForChart = productionData.filter(p => {
+    const d = safeToDate(p.date);
+    return d >= cStart && d <= cEnd;
+  });
+
+  const totalRevenue = filteredSalesForSummary.reduce((sum, s) => sum + (s.total || 0), 0);
+  const totalProduction = filteredProdForSummary.reduce((sum, p) => sum + (p.quantity || 0), 0);
+  const totalSalesQty = filteredSalesForSummary.reduce((sum, s) => sum + (s.quantity || 0), 0);
 
   // Prepare chart data for production vs sales
   const getChartData = () => {
-    const now = new Date();
     let interval: Date[] = [];
     
     if (period === 'daily') {
-      // For daily, we might want to show hours, but let's stick to days for consistency
-      interval = [now];
+      interval = eachDayOfInterval({ start: startOfDay(subDays(reportDate, 6)), end: endOfDay(reportDate) });
     } else if (period === 'weekly') {
-      interval = eachDayOfInterval({ start: startOfWeek(now), end: endOfWeek(now) });
+      // Last 4 weeks ending at reportDate
+      interval = [
+        subWeeks(reportDate, 3),
+        subWeeks(reportDate, 2),
+        subWeeks(reportDate, 1),
+        reportDate
+      ].map(d => startOfWeek(d));
     } else {
-      interval = eachDayOfInterval({ start: startOfMonth(now), end: endOfMonth(now) });
+      interval = eachDayOfInterval({ start: startOfMonth(reportDate), end: endOfMonth(reportDate) });
     }
 
     return interval.map(day => {
-      const dayProd = productionData.filter(p => isSameDay(p.date.toDate(), day)).reduce((sum, p) => sum + p.quantity, 0);
-      const daySales = salesData.filter(s => isSameDay(s.date.toDate(), day)).reduce((sum, s) => sum + s.quantity, 0);
+      let filteredProd, filteredSales;
+      let label = '';
+
+      if (period === 'weekly') {
+        const weekEnd = endOfWeek(day);
+        filteredProd = filteredProdForChart.filter(p => {
+          const d = safeToDate(p.date);
+          return d >= day && d <= weekEnd;
+        });
+        filteredSales = filteredSalesForChart.filter(s => {
+          const d = safeToDate(s.date);
+          return d >= day && d <= weekEnd;
+        });
+        label = `Wk ${format(day, 'dd/MM')}`;
+      } else {
+        filteredProd = filteredProdForChart.filter(p => isSameDay(safeToDate(p.date), day));
+        filteredSales = filteredSalesForChart.filter(s => isSameDay(safeToDate(s.date), day));
+        label = format(day, period === 'monthly' ? 'dd' : 'EEE');
+      }
+
       return {
-        name: format(day, period === 'monthly' ? 'dd' : 'EEE'),
-        production: dayProd,
-        sales: daySales
+        name: label,
+        production: filteredProd.reduce((sum, p) => sum + (p.quantity || 0), 0),
+        sales: filteredSales.reduce((sum, s) => sum + (s.quantity || 0), 0)
       };
     });
   };
 
   // Prepare pie chart data for sales by product
   const getSalesByProduct = () => {
-    const grouped = salesData.reduce((acc: any, sale) => {
-      acc[sale.productName] = (acc[sale.productName] || 0) + sale.total;
+    const grouped = filteredSalesForSummary.reduce((acc: any, sale) => {
+      acc[sale.productName] = (acc[sale.productName] || 0) + (sale.total || 0);
       return acc;
     }, {});
     return Object.keys(grouped).map(name => ({ name, value: grouped[name] }));
+  };
+
+  const handlePrev = () => {
+    if (period === 'daily') setReportDate(d => subDays(d, 1));
+    else if (period === 'weekly') setReportDate(d => subWeeks(d, 1));
+    else setReportDate(d => subMonths(d, 1));
+  };
+
+  const handleNext = () => {
+    if (period === 'daily') setReportDate(d => addDays(d, 1));
+    else if (period === 'weekly') setReportDate(d => addWeeks(d, 1));
+    else setReportDate(d => addMonths(d, 1));
   };
 
   return (
@@ -176,6 +271,21 @@ export default function Reports() {
         </div>
         
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="flex items-center justify-between gap-1 bg-card border rounded-lg p-1 min-w-[180px]">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handlePrev}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-[10px] font-bold uppercase tracking-wider">{getTimeLabel()}</span>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8" 
+              onClick={handleNext}
+              disabled={reportDate >= startOfDay(new Date()) && period === 'daily'}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
           <Tabs value={period} onValueChange={(v: any) => setPeriod(v)} className="w-full sm:w-[300px]">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="daily">Daily</TabsTrigger>

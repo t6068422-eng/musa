@@ -12,7 +12,7 @@ import {
   Download,
   Image as ImageIcon
 } from 'lucide-react';
-import { collection, query, where, onSnapshot, Timestamp, orderBy, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, orderBy, doc, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Product, ProductionEntry, SaleEntry, Client } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -102,15 +102,21 @@ export default function Dashboard() {
       handleFirestoreError(error, OperationType.LIST, 'sales');
     });
 
-    // Fetch last 7 days sales for chart
-    const sevenDaysAgo = startOfDay(subDays(new Date(), 7));
+    // Fetch Recent Sales for chart
     const qRecentSales = query(
       collection(db, 'sales'),
-      where('date', '>=', Timestamp.fromDate(sevenDaysAgo))
+      limit(200) // Get recent sales and filter locally if needed
     );
     const unsubscribeRecent = onSnapshot(qRecentSales, (snapshot) => {
       const data = snapshot.docs.map(doc => doc.data() as SaleEntry);
-      const grouped = data.reduce((acc: any, sale) => {
+      const sevenDaysAgo = startOfDay(subDays(new Date(), 7));
+      
+      const filtered = data.filter(s => {
+        const d = s.date.toDate();
+        return d >= sevenDaysAgo;
+      });
+
+      const grouped = filtered.reduce((acc: any, sale) => {
         const date = format(sale.date.toDate(), 'MMM dd');
         acc[date] = (acc[date] || 0) + sale.total;
         return acc;
@@ -126,19 +132,22 @@ export default function Dashboard() {
       handleFirestoreError(error, OperationType.LIST, 'sales (recent)');
     });
 
-    // Fetch Current Monthly Report (Aggregated from History)
-    const now = new Date();
-    const startOfCurrMonth = startOfMonth(now);
-    const endOfCurrMonth = endOfMonth(now);
-    
+    // Fetch Current Monthly Report data
     const qMonthly = query(
       collection(db, 'stockControlHistory'),
-      where('date', '>=', Timestamp.fromDate(startOfCurrMonth)),
-      where('date', '<=', Timestamp.fromDate(endOfCurrMonth))
+      limit(500)
     );
 
     const unsubscribeMonthly = onSnapshot(qMonthly, (snapshot) => {
-      const historyDocs = snapshot.docs.map(doc => doc.data());
+      const allHistory = snapshot.docs.map(doc => doc.data());
+      const now = new Date();
+      const startOfCurrMonth = startOfMonth(now);
+      const endOfCurrMonth = endOfMonth(now);
+
+      const historyDocs = allHistory.filter(doc => {
+        const d = doc.date.toDate();
+        return d >= startOfCurrMonth && d <= endOfCurrMonth;
+      });
       
       const totalRevenue = historyDocs.reduce((sum, doc) => {
         return sum + (doc.entries || []).reduce((eSum: number, e: any) => eSum + (e.qtySold * e.price), 0);
