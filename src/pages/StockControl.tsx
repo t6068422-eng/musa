@@ -542,7 +542,8 @@ export default function StockControl() {
             price: e.price || 0,
             preparedStock: e.preparedStock || 0,
             customFields: e.customFields || {},
-            productName: product.name
+            productName: product.name,
+            imageUrl: product.imageUrl || ''
           };
         }).filter(Boolean),
         customColumns
@@ -775,11 +776,20 @@ export default function StockControl() {
                     return (
                       <TableRow key={product.id} className="hover:bg-accent/5 border-b border-green-800/30">
                         <TableCell className="font-bold text-left border-r border-green-800/30 p-1 sticky left-0 bg-background/80 backdrop-blur-sm z-10">
-                          <Input 
-                            className="w-full border-none bg-transparent focus-visible:ring-0 h-10 md:h-8 font-bold text-sm"
-                            value={product.name}
-                            onChange={(e) => handleProductNameChange(product.id, e.target.value)}
-                          />
+                          <div className="flex items-center gap-2 px-2">
+                            <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                              {product.imageUrl ? (
+                                <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <Package className="w-4 h-4 text-muted-foreground/40" />
+                              )}
+                            </div>
+                            <Input 
+                              className="w-full border-none bg-transparent focus-visible:ring-0 h-10 md:h-8 font-bold text-sm p-0"
+                              value={product.name}
+                              onChange={(e) => handleProductNameChange(product.id, e.target.value)}
+                            />
+                          </div>
                         </TableCell>
                         <TableCell className="text-center border-r border-green-800/30 p-1 bg-blue-50/30">
                           <Input 

@@ -6,7 +6,7 @@ import { Product, SaleEntry } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Download, Activity, Image as ImageIcon } from 'lucide-react';
+import { Download, Activity, Image as ImageIcon, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { exportToCSV } from '../lib/export';
 import { toPng } from 'html-to-image';
@@ -75,7 +75,8 @@ export default function PreparedStock() {
       currentStock: product.currentStock,
       totalSales: productSales,
       preparedStock: preparedStock,
-      unit: product.unit
+      unit: product.unit,
+      imageUrl: product.imageUrl
     };
   });
 
@@ -121,6 +122,7 @@ export default function PreparedStock() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[50px]"></TableHead>
                   <TableHead className="min-w-[150px]">Product Name</TableHead>
                   <TableHead className="min-w-[120px]">Category</TableHead>
                   <TableHead className="text-right min-w-[120px]">Current Stock</TableHead>
@@ -131,6 +133,15 @@ export default function PreparedStock() {
               <TableBody>
                 {preparedStockData.map((item) => (
                   <TableRow key={item.id}>
+                    <TableCell>
+                      <div className="w-10 h-10 rounded-md overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Package className="w-5 h-5 text-muted-foreground/50" />
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>{item.category}</TableCell>
                     <TableCell className="text-right">{item.currentStock} {item.unit}</TableCell>

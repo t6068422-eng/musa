@@ -114,6 +114,7 @@ export default function AvailableStock() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[50px]"></TableHead>
                   <TableHead className="min-w-[150px]">Product Name</TableHead>
                   <TableHead className="min-w-[120px]">Category</TableHead>
                   <TableHead className="text-right min-w-[120px]">Current Stock</TableHead>
@@ -125,6 +126,15 @@ export default function AvailableStock() {
                   const status = getStatus(product);
                   return (
                     <TableRow key={product.id}>
+                      <TableCell>
+                        <div className="w-10 h-10 rounded-md overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                          {product.imageUrl ? (
+                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package className="w-5 h-5 text-muted-foreground/50" />
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="font-medium">{product.name}</TableCell>
                       <TableCell>{product.category}</TableCell>
                       <TableCell className="text-right font-bold">

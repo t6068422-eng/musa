@@ -30,7 +30,8 @@ import {
   Calendar as CalendarIcon,
   User as UserIcon,
   Clock,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Package
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { toPng } from 'html-to-image';
@@ -51,6 +52,7 @@ interface HistoryEntry {
   price: number;
   preparedStock: number;
   customFields: Record<string, any>;
+  imageUrl?: string;
 }
 
 interface StockHistory {
@@ -255,6 +257,7 @@ export default function SavedData() {
                             <Table className="min-w-[800px]">
                               <TableHeader>
                                 <TableRow className="bg-accent/50">
+                                  <TableHead className="sticky left-0 bg-accent/50 z-10 w-[40px]"></TableHead>
                                   <TableHead className="sticky left-0 bg-accent/50 z-10">Product</TableHead>
                                   <TableHead className="text-center">Prepared</TableHead>
                                   <TableHead className="text-center">Production</TableHead>
@@ -275,7 +278,16 @@ export default function SavedData() {
                                     const price = entry.price || 0;
                                     return (
                                      <TableRow key={idx}>
-                                       <TableCell className="font-medium sticky left-0 bg-background/80 backdrop-blur-sm z-10">{entry.productName}</TableCell>
+                                       <TableCell className="sticky left-0 bg-background/80 backdrop-blur-sm z-10">
+                                         <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                                           {entry.imageUrl ? (
+                                             <img src={entry.imageUrl} alt={entry.productName} className="w-full h-full object-cover" />
+                                           ) : (
+                                             <Package className="w-4 h-4 text-muted-foreground/40" />
+                                           )}
+                                         </div>
+                                       </TableCell>
+                                       <TableCell className="font-medium sticky left-12 bg-background/80 backdrop-blur-sm z-10">{entry.productName}</TableCell>
                                        <TableCell className="text-center">{prepared}</TableCell>
                                        <TableCell className="text-center">{entry.production || 0}</TableCell>
                                        <TableCell className="text-center">{sold}</TableCell>

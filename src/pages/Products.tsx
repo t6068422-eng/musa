@@ -9,7 +9,8 @@ import {
   Package,
   AlertCircle,
   Image as ImageIcon,
-  Download
+  Download,
+  X
 } from 'lucide-react';
 import { 
   collection, 
@@ -87,8 +88,29 @@ export default function Products() {
     unit: '',
     minStockLevel: 0,
     currentStock: 0,
-    price: 0
+    price: 0,
+    imageUrl: ''
   });
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024) {
+      return toast.error('Image too large. Please select an image under 1MB.');
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setFormData(prev => ({ ...prev, imageUrl: base64 }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setFormData(prev => ({ ...prev, imageUrl: '' }));
+  };
 
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
 
@@ -131,7 +153,7 @@ export default function Products() {
       });
       toast.success('Product added successfully');
       setIsAddDialogOpen(false);
-      setFormData({ name: '', category: '', unit: '', minStockLevel: 0, currentStock: 0, price: 0 });
+      setFormData({ name: '', category: '', unit: '', minStockLevel: 0, currentStock: 0, price: 0, imageUrl: '' });
     } catch (error: any) {
       toast.error('Failed to add product');
     }
@@ -219,9 +241,41 @@ export default function Products() {
                     <Label htmlFor="initialStock">Initial Stock</Label>
                     <Input id="initialStock" type="number" value={formData.currentStock} onChange={e => setFormData({...formData, currentStock: Number(e.target.value)})} required />
                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="price">Base Price (PKR)</Label>
                     <Input id="price" type="number" value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} required />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Product Image</Label>
+                    <div className="flex items-center gap-2">
+                      {formData.imageUrl ? (
+                        <div className="relative w-16 h-16 rounded-md overflow-hidden border border-border">
+                          <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                          <button 
+                            type="button"
+                            onClick={removeImage}
+                            className="absolute top-0 right-0 p-0.5 bg-destructive text-white rounded-bl-md shadow-sm"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center w-16 h-16 rounded-md border border-dashed border-border bg-muted/50 cursor-pointer hover:bg-muted transition-colors relative">
+                          <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                          <Input 
+                            type="file" 
+                            accept="image/*" 
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={handleImageUpload}
+                          />
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground">
+                        {formData.imageUrl ? 'Image ready' : 'Max 1MB'}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>
@@ -255,6 +309,7 @@ export default function Products() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[50px]"></TableHead>
                 <TableHead className="min-w-[150px]">Product Name</TableHead>
                 <TableHead className="min-w-[120px]">Category</TableHead>
                 <TableHead className="min-w-[120px]">Current Stock</TableHead>
@@ -278,6 +333,15 @@ export default function Products() {
                   const isLowStock = product.currentStock <= product.minStockLevel;
                   return (
                     <TableRow key={product.id}>
+                      <TableCell>
+                        <div className="w-10 h-10 rounded-md overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                          {product.imageUrl ? (
+                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package className="w-5 h-5 text-muted-foreground/50" />
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="font-medium">{product.name}</TableCell>
                       <TableCell>{product.category}</TableCell>
                       <TableCell>
@@ -309,7 +373,8 @@ export default function Products() {
                                 unit: product.unit,
                                 minStockLevel: product.minStockLevel,
                                 currentStock: product.currentStock,
-                                price: product.price || 0
+                                price: product.price || 0,
+                                imageUrl: product.imageUrl || ''
                               });
                             }}
                           >
@@ -383,6 +448,38 @@ export default function Products() {
               <div className="grid gap-2">
                 <Label htmlFor="edit-stock">Current Stock</Label>
                 <Input id="edit-stock" type="number" value={formData.currentStock} onChange={e => setFormData({...formData, currentStock: Number(e.target.value)})} required />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Product Image</Label>
+              <div className="flex items-center gap-2">
+                {formData.imageUrl ? (
+                  <div className="relative w-24 h-24 rounded-md overflow-hidden border border-border group">
+                    <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                    <button 
+                      type="button"
+                      onClick={removeImage}
+                      className="absolute top-0 right-0 p-1 bg-destructive text-white rounded-bl-md shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center w-24 h-24 rounded-md border border-dashed border-border bg-muted/50 cursor-pointer hover:bg-muted transition-colors relative">
+                    <Plus className="w-6 h-6 text-muted-foreground" />
+                    <span className="text-[10px] text-muted-foreground mt-1">Upload</span>
+                    <Input 
+                      type="file" 
+                      accept="image/*" 
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      onChange={handleImageUpload}
+                    />
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>{formData.imageUrl ? 'Image updated' : 'Upload product photo'}</p>
+                  <p className="opacity-70 text-[10px]">Max size: 1MB. PNG, JPG formats.</p>
+                </div>
               </div>
             </div>
             <DialogFooter>

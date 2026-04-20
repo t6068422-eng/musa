@@ -18,6 +18,7 @@ export interface Product {
   currentStock: number;
   availableStock: number;
   price?: number;
+  imageUrl?: string;
   customFields?: Record<string, any>;
   createdAt: Timestamp;
 }
@@ -88,6 +89,7 @@ export interface MonthlyDetailedEntry {
   preparedStock: number;
   currentStock: number;
   price: number;
+  imageUrl?: string;
 }
 
 export interface MonthlyReport {

@@ -7,7 +7,8 @@ import {
   DollarSign,
   Trash2,
   Image as ImageIcon,
-  Download
+  Download,
+  Package
 } from 'lucide-react';
 import { 
   collection, 
@@ -408,6 +409,7 @@ export default function Sales() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="min-w-[120px]">Date</TableHead>
+                    <TableHead className="w-[40px]"></TableHead>
                     <TableHead className="min-w-[150px]">Product</TableHead>
                     <TableHead>Client</TableHead>
                     <TableHead>Qty</TableHead>
@@ -427,6 +429,15 @@ export default function Sales() {
                       <TableRow key={log.id}>
                         <TableCell className="text-xs">
                           {format(log.date.toDate(), 'MMM dd, HH:mm')}
+                        </TableCell>
+                        <TableCell>
+                          <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                            {products.find(p => p.id === log.productId)?.imageUrl ? (
+                              <img src={products.find(p => p.id === log.productId)?.imageUrl} alt={log.productName} className="w-full h-full object-cover" />
+                            ) : (
+                              <Package className="w-4 h-4 text-muted-foreground/40" />
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="font-medium">{log.productName}</TableCell>
                         <TableCell className="text-xs">{log.clientName || 'Cash'}</TableCell>

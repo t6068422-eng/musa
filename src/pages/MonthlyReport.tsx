@@ -137,7 +137,8 @@ export default function DetailedReports() {
                 revenue: 0,
                 price: e.price,
                 preparedStock: 0,
-                currentStock: 0 
+                currentStock: 0,
+                imageUrl: e.imageUrl || (allProducts.find(p => p.id === e.productId) as any)?.imageUrl || ''
               };
             }
             productMap[e.productId].production += (e.production || 0);
@@ -326,6 +327,7 @@ export default function DetailedReports() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-[#93c47d] hover:bg-[#93c47d] border-b-2 border-green-800">
+                  <TableHead className="w-[40px]"></TableHead>
                   <TableHead className="text-black font-bold border-r border-green-800/20">Product</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800/20">Production</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800/20">Qty Sold</TableHead>
@@ -350,6 +352,15 @@ export default function DetailedReports() {
                 ) : (
                   filteredStats.map((stat) => (
                     <TableRow key={stat.productId} className="hover:bg-green-50/30 border-b border-border/50">
+                      <TableCell>
+                        <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center mx-auto">
+                          {stat.imageUrl ? (
+                            <img src={stat.imageUrl} alt={stat.productName} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package className="w-4 h-4 text-muted-foreground/40" />
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="font-bold border-r border-border/50">{stat.productName}</TableCell>
                       <TableCell className="text-center border-r border-border/50 font-bold text-blue-700">
                         {stat.production}
@@ -368,6 +379,7 @@ export default function DetailedReports() {
                 )}
                 {!loading && filteredStats.length > 0 && (
                   <TableRow className="bg-muted/50 font-bold">
+                    <TableCell></TableCell>
                     <TableCell className="border-r border-border/50">TOTALS</TableCell>
                     <TableCell className="text-center border-r border-border/50 text-blue-800">{totalProduction.toLocaleString()}</TableCell>
                     <TableCell className="text-center border-r border-border/50 text-purple-800">{totalSalesQty.toLocaleString()}</TableCell>
