@@ -7,7 +7,9 @@ import {
   Edit2, 
   Trash2,
   Package,
-  AlertCircle
+  AlertCircle,
+  Image as ImageIcon,
+  Download
 } from 'lucide-react';
 import { 
   collection, 
@@ -46,6 +48,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
+import { toPng } from 'html-to-image';
+import { format } from 'date-fns';
 
 export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -54,6 +58,27 @@ export default function Products() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const { user, isAdmin } = useAuth();
+  const tableRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadAsImage = () => {
+    if (!tableRef.current) return;
+    
+    toast.loading('Capturing product list...');
+    toPng(tableRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `ProductList_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Product list captured');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture image');
+      });
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -156,8 +181,12 @@ export default function Products() {
           <p className="text-muted-foreground">Manage your inventory items and stock levels.</p>
         </div>
         
-        {isAdmin && (
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <div className="flex items-center gap-2">
+          <Button onClick={downloadAsImage} variant="outline" className="gap-2">
+            <ImageIcon className="w-4 h-4" /> Download Picture
+          </Button>
+          {isAdmin && (
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger render={<Button className="gap-2" />}>
               <Plus className="w-4 h-4" /> Add Product
             </DialogTrigger>
@@ -203,6 +232,7 @@ export default function Products() {
           </Dialog>
         )}
       </div>
+    </div>
 
       <div className="flex items-center gap-4 bg-card/50 p-4 rounded-lg border border-border/50 backdrop-blur-sm">
         <div className="relative flex-1">
@@ -219,7 +249,8 @@ export default function Products() {
         </Button>
       </div>
 
-      <div className="border border-border/50 rounded-lg overflow-hidden bg-card/50 backdrop-blur-sm">
+      <div ref={tableRef} className="space-y-6">
+        <div className="border border-border/50 rounded-lg overflow-hidden bg-card/50 backdrop-blur-sm">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -304,6 +335,7 @@ export default function Products() {
           </Table>
         </div>
       </div>
+    </div>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>

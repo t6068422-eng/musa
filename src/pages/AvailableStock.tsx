@@ -7,15 +7,39 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Download, Package, Search } from 'lucide-react';
+import { Download, Package, Search, Image as ImageIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '../context/AuthContext';
 import { exportToCSV } from '../lib/export';
+import { toPng } from 'html-to-image';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
 
 export default function AvailableStock() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const { user } = useAuth();
+  const stockRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadAsImage = () => {
+    if (!stockRef.current) return;
+    
+    toast.loading('Capturing stock report...');
+    toPng(stockRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `AvailableStock_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Stock report captured');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture image');
+      });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -57,12 +81,18 @@ export default function AvailableStock() {
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Available Stock</h2>
           <p className="text-sm md:text-base text-muted-foreground">Final stock display and inventory status.</p>
         </div>
-        <Button onClick={handleExport} variant="outline" className="gap-2 w-full sm:w-auto">
-          <Download className="w-4 h-4" /> Export CSV
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button onClick={downloadAsImage} variant="outline" className="gap-2 flex-1 sm:flex-none">
+            <ImageIcon className="w-4 h-4" /> Download Picture
+          </Button>
+          <Button onClick={handleExport} variant="outline" className="gap-2 flex-1 sm:flex-none">
+            <Download className="w-4 h-4" /> Export CSV
+          </Button>
+        </div>
       </div>
 
-      <div className="relative">
+      <div ref={stockRef} className="space-y-6">
+        <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input 
           placeholder="Search stock..." 
@@ -114,5 +144,6 @@ export default function AvailableStock() {
         </CardContent>
       </Card>
     </div>
-  );
+  </div>
+);
 }

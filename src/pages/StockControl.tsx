@@ -60,6 +60,8 @@ import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
 
+import { toPng } from 'html-to-image';
+
 export default function StockControl() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -84,6 +86,33 @@ export default function StockControl() {
   const [quickEntryQtySold, setQuickEntryQtySold] = useState('');
   const { user, isAdmin, profile } = useAuth();
   const isLocalChange = useRef(false);
+  const stockAreaRef = useRef<HTMLDivElement>(null);
+
+  const downloadAsImage = () => {
+    if (!stockAreaRef.current) return;
+    
+    toast.loading('Capturing stock sheet...');
+    toPng(stockAreaRef.current, { 
+      backgroundColor: '#ffffff',
+      cacheBust: true,
+      style: {
+        borderRadius: '0px'
+      }
+    })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `StockControl_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Stock control captured successfully');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture image');
+      });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -569,7 +598,7 @@ export default function StockControl() {
   );
 
   return (
-    <div className="space-y-6 max-w-full md:max-w-[95vw] mx-auto pb-20 md:pb-6">
+    <div className="space-y-6 max-w-full md:max-w-[95vw] mx-auto pb-20 md:pb-6" ref={stockAreaRef}>
       {/* Header matching the image style */}
       <div className="border-2 border-green-800 rounded-lg overflow-hidden shadow-lg">
         <div className="bg-[#38761d] text-white text-center py-2 font-bold text-lg md:text-xl border-b-2 border-green-800">
@@ -595,6 +624,11 @@ export default function StockControl() {
           />
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="flex-1 md:flex-none gap-2 border-primary text-primary hover:bg-primary/5 h-11 md:h-10" onClick={downloadAsImage}>
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Download Picture</span>
+            <span className="sm:hidden">Pic</span>
+          </Button>
           <Button 
             variant="outline" 
             className="flex-1 md:flex-none gap-2 border-orange-500 text-orange-600 hover:bg-orange-50 h-11 md:h-10"

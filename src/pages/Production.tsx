@@ -5,7 +5,8 @@ import {
   Calendar as CalendarIcon,
   Factory,
   History,
-  Trash2
+  Trash2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { 
   collection, 
@@ -53,12 +54,34 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
+import { toPng } from 'html-to-image';
 
 export default function Production() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productionLogs, setProductionLogs] = useState<ProductionEntry[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const { user } = useAuth();
+  const productionRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadAsImage = () => {
+    if (!productionRef.current) return;
+    
+    toast.loading('Capturing production status...');
+    toPng(productionRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `Production_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Production status captured');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture image');
+      });
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -185,11 +208,15 @@ export default function Production() {
           <p className="text-muted-foreground">Log daily production entries and update stock levels.</p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger render={<Button className="gap-2" />}>
-            <Plus className="w-4 h-4" /> Log Production
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+        <div className="flex items-center gap-2">
+          <Button onClick={downloadAsImage} variant="outline" className="gap-2">
+            <ImageIcon className="w-4 h-4" /> Download Picture
+          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger render={<Button className="gap-2" />}>
+              <Plus className="w-4 h-4" /> Log Production
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Log Daily Production & Sales</DialogTitle>
               <DialogDescription>Select a product and enter the produced and sold quantities.</DialogDescription>
@@ -260,8 +287,10 @@ export default function Production() {
           </DialogContent>
         </Dialog>
       </div>
+    </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+    <div ref={productionRef} className="space-y-6">
+        <div className="grid gap-6 md:grid-cols-3">
         <Card className="md:col-span-2 border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -366,5 +395,6 @@ export default function Production() {
         </Card>
       </div>
     </div>
-  );
+  </div>
+);
 }

@@ -5,7 +5,9 @@ import {
   ShoppingCart,
   History,
   DollarSign,
-  Trash2
+  Trash2,
+  Image as ImageIcon,
+  Download
 } from 'lucide-react';
 import { 
   collection, 
@@ -52,6 +54,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
 import { Printer } from 'lucide-react';
+import { toPng } from 'html-to-image';
 
 export default function Sales() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -60,6 +63,27 @@ export default function Sales() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedSale, setSelectedSale] = useState<SaleEntry | null>(null);
   const { user } = useAuth();
+  const salesRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadAsImage = () => {
+    if (!salesRef.current) return;
+    
+    toast.loading('Capturing sales status...');
+    toPng(salesRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `Sales_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Sales status captured');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture image');
+      });
+  };
 
   const handlePrintInvoice = (sale: SaleEntry) => {
     const printWindow = window.open('', '_blank');
@@ -276,11 +300,15 @@ export default function Sales() {
           <p className="text-muted-foreground">Record sales transactions and manage inventory outflow.</p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger render={<Button className="gap-2 bg-primary text-primary-foreground" />}>
-            <Plus className="w-4 h-4" /> New Sale
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+        <div className="flex items-center gap-2">
+          <Button onClick={downloadAsImage} variant="outline" className="gap-2">
+            <ImageIcon className="w-4 h-4" /> Download Picture
+          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger render={<Button className="gap-2 bg-primary text-primary-foreground" />}>
+              <Plus className="w-4 h-4" /> New Sale
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Record New Sale</DialogTitle>
               <DialogDescription>Enter the sales details. Stock will be automatically deducted.</DialogDescription>
@@ -363,8 +391,10 @@ export default function Sales() {
           </DialogContent>
         </Dialog>
       </div>
+    </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+  <div ref={salesRef} className="space-y-6">
+        <div className="grid gap-6 md:grid-cols-3">
         <Card className="md:col-span-2 border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -485,5 +515,6 @@ export default function Sales() {
         </Card>
       </div>
     </div>
-  );
+  </div>
+);
 }

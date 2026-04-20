@@ -13,7 +13,10 @@ import {
   History,
   Download,
   Search,
-  Package
+  Package,
+  Trash2,
+  Edit2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { 
   doc, 
@@ -23,7 +26,9 @@ import {
   where, 
   orderBy,
   Timestamp,
-  writeBatch
+  writeBatch,
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
@@ -60,11 +65,13 @@ import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { toPng } from 'html-to-image';
 
 export default function ClientDetail() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const pageRef = React.useRef<HTMLDivElement>(null);
   
   const [client, setClient] = useState<Client | null>(null);
   const [purchaseHistory, setPurchaseHistory] = useState<SaleEntry[]>([]);
@@ -72,13 +79,43 @@ export default function ClientDetail() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false);
+  const [editingSale, setEditingSale] = useState<SaleEntry | null>(null);
+  const [saleToDelete, setSaleToDelete] = useState<SaleEntry | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { isAdmin } = useAuth();
+
+  const downloadAsImage = () => {
+    if (!pageRef.current) return;
+    
+    toast.loading('Exporting client record as image...');
+    toPng(pageRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `ClientDetail_${client?.name || 'Client'}_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Client record captured');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture image');
+      });
+  };
   
   // Form State
   const [formData, setFormData] = useState({
     productId: '',
     quantity: 1,
     price: 0
+  });
+
+  const [editSaleData, setEditSaleData] = useState({
+    productId: '',
+    quantity: 1,
+    price: 0,
+    date: ''
   });
 
   useEffect(() => {
@@ -197,6 +234,113 @@ export default function ClientDetail() {
     }
   };
 
+  const handleEditSale = (sale: SaleEntry) => {
+    setEditingSale(sale);
+    setEditSaleData({
+      productId: sale.productId,
+      quantity: sale.quantity,
+      price: sale.price,
+      date: format(sale.date.toDate(), "yyyy-MM-dd'T'HH:mm")
+    });
+  };
+
+  const handleUpdateSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !client || !editingSale || !clientId) return;
+
+    const newProduct = products.find(p => p.id === editSaleData.productId);
+    if (!newProduct) return toast.error('Invalid product selected');
+
+    setSubmitting(true);
+    try {
+      const batch = writeBatch(db);
+      const newQty = Number(editSaleData.quantity);
+      const newPrice = Number(editSaleData.price);
+      const newTotal = newQty * newPrice;
+      const newDate = Timestamp.fromDate(new Date(editSaleData.date));
+
+      // 1. Update Product Stock (Revert old, Apply new)
+      if (editingSale.productId === editSaleData.productId) {
+        const diff = newQty - editingSale.quantity;
+        const productRef = doc(db, 'products', editingSale.productId);
+        batch.update(productRef, {
+          currentStock: newProduct.currentStock - diff
+        });
+      } else {
+        const oldProductRef = doc(db, 'products', editingSale.productId);
+        const oldProduct = products.find(p => p.id === editingSale.productId);
+        if (oldProduct) {
+          batch.update(oldProductRef, {
+            currentStock: oldProduct.currentStock + editingSale.quantity
+          });
+        }
+        const newProductRef = doc(db, 'products', editSaleData.productId);
+        batch.update(newProductRef, {
+          currentStock: newProduct.currentStock - newQty
+        });
+      }
+
+      // 2. Update Sale Record
+      const saleRef = doc(db, 'sales', editingSale.id);
+      batch.update(saleRef, {
+        productId: editSaleData.productId,
+        productName: newProduct.name,
+        quantity: newQty,
+        price: newPrice,
+        total: newTotal,
+        date: newDate
+      });
+
+      // 3. Update Client Stats
+      const clientRef = doc(db, 'clients', client.id);
+      const totalSpentDiff = newTotal - editingSale.total;
+      const totalQtyDiff = newQty - editingSale.quantity;
+      batch.update(clientRef, {
+        totalSpent: (client.totalSpent || 0) + totalSpentDiff,
+        totalQuantity: (client.totalQuantity || 0) + totalQtyDiff
+      });
+
+      await batch.commit();
+      toast.success('Purchase history updated');
+      setEditingSale(null);
+    } catch (error: any) {
+      console.error(error);
+      toast.error('Failed to update purchase history');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteSale = async () => {
+    if (!user || !client || !clientId || !saleToDelete) return;
+
+    setSubmitting(true);
+    try {
+      const batch = writeBatch(db);
+      const product = products.find(p => p.id === saleToDelete.productId);
+      if (product) {
+        const productRef = doc(db, 'products', saleToDelete.productId);
+        batch.update(productRef, {
+          currentStock: product.currentStock + saleToDelete.quantity
+        });
+      }
+      const clientRef = doc(db, 'clients', client.id);
+      batch.update(clientRef, {
+        totalSpent: (client.totalSpent || 0) - saleToDelete.total,
+        totalQuantity: (client.totalQuantity || 0) - saleToDelete.quantity
+      });
+      batch.delete(doc(db, 'sales', saleToDelete.id));
+      await batch.commit();
+      toast.success('Purchase record deleted and stock reverted');
+      setSaleToDelete(null);
+    } catch (error: any) {
+      console.error(error);
+      toast.error('Failed to delete record: ' + error.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const filteredHistory = purchaseHistory.filter(h => 
     h.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     h.id.toLowerCase().includes(searchTerm.toLowerCase())
@@ -255,14 +399,18 @@ export default function ClientDetail() {
             <Calendar className="w-4 h-4" /> Added {format(client.createdAt.toDate(), 'PPP')}
           </p>
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Button onClick={downloadAsImage} variant="outline" className="gap-2">
+            <ImageIcon className="w-4 h-4" /> Download Picture
+          </Button>
           <Button onClick={exportReport} variant="outline" className="gap-2">
-            <Download className="w-4 h-4" /> Export Report
+            <Download className="w-4 h-4" /> Export CSV
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-4">
+      <div ref={pageRef} className="space-y-6">
+        <div className="grid gap-6 md:grid-cols-4">
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Orders</CardTitle>
@@ -412,12 +560,13 @@ export default function ClientDetail() {
                     <TableHead>Qty</TableHead>
                     <TableHead>Unit Price</TableHead>
                     <TableHead className="text-right">Total Price</TableHead>
+                    {isAdmin && <TableHead className="text-right">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredHistory.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-12 text-muted-foreground italic">
+                      <TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-12 text-muted-foreground italic">
                         {loading ? 'Loading records...' : 'No purchase records found.'}
                       </TableCell>
                     </TableRow>
@@ -435,6 +584,28 @@ export default function ClientDetail() {
                         <TableCell className="text-right font-bold">
                           Rs. {history.total.toLocaleString()}
                         </TableCell>
+                        {isAdmin && (
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-primary hover:bg-primary/10"
+                                onClick={() => handleEditSale(history)}
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                onClick={() => setSaleToDelete(history)}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   )}
@@ -443,6 +614,110 @@ export default function ClientDetail() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Edit History Dialog */}
+        <Dialog open={!!editingSale} onOpenChange={(open) => !open && setEditingSale(null)}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Purchase Record</DialogTitle>
+              <DialogDescription>
+                Modify the selected purchase record for <strong>{client.name}</strong>.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleUpdateSale} className="space-y-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-product">Product</Label>
+                <Select 
+                  onValueChange={(val) => setEditSaleData({...editSaleData, productId: val})} 
+                  value={editSaleData.productId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select product" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} ({p.currentStock} {p.unit} in stock)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-date">Transaction Date</Label>
+                <Input 
+                  id="edit-date" 
+                  type="datetime-local" 
+                  value={editSaleData.date} 
+                  onChange={e => setEditSaleData({ ...editSaleData, date: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-quantity">Quantity</Label>
+                  <Input 
+                    id="edit-quantity" 
+                    type="number" 
+                    value={editSaleData.quantity} 
+                    onChange={e => setEditSaleData({ ...editSaleData, quantity: Number(e.target.value) })}
+                    min="0"
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-price">Unit Price (Rs.)</Label>
+                  <Input 
+                    id="edit-price" 
+                    type="number" 
+                    step="0.01"
+                    value={editSaleData.price} 
+                    onChange={e => setEditSaleData({ ...editSaleData, price: Number(e.target.value) })}
+                    min="0"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-accent/50 border border-border/50 text-center">
+                <p className="text-xs text-muted-foreground uppercase font-bold tracking-widest mb-1">New Total</p>
+                <p className="text-2xl font-bold text-primary">Rs. {(editSaleData.quantity * editSaleData.price).toLocaleString()}</p>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditingSale(null)}>Cancel</Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? 'Updating...' : 'Update Record'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={!!saleToDelete} onOpenChange={(open) => !open && setSaleToDelete(null)}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Confirm Deletion</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this purchase record? 
+                This will automatically revert <strong>{saleToDelete?.quantity} {products.find(p => p.id === saleToDelete?.productId)?.unit}</strong> back to stock.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 text-sm">
+              <p>Product: <span className="font-semibold">{saleToDelete?.productName}</span></p>
+              <p>Total Amount: <span className="font-semibold text-destructive">Rs. {saleToDelete?.total.toLocaleString()}</span></p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSaleToDelete(null)}>Cancel</Button>
+              <Button 
+                variant="destructive" 
+                onClick={handleDeleteSale}
+                disabled={submitting}
+              >
+                {submitting ? 'Deleting...' : 'Delete Record'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Card className="md:col-span-4 border-border/50 bg-card/50 backdrop-blur-sm h-fit">
           <CardHeader>
@@ -488,5 +763,6 @@ export default function ClientDetail() {
         </Card>
       </div>
     </div>
-  );
+  </div>
+);
 }

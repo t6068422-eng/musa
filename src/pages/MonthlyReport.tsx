@@ -45,6 +45,8 @@ import {
   addWeeks
 } from 'date-fns';
 import { Link } from 'react-router-dom';
+import { toPng } from 'html-to-image';
+import { toast } from 'sonner';
 
 export default function DetailedReports() {
   const [reportType, setReportType] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
@@ -54,6 +56,27 @@ export default function DetailedReports() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const reportAreaRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadAsImage = () => {
+    if (!reportAreaRef.current) return;
+    
+    toast.loading('Preparing image download...');
+    toPng(reportAreaRef.current, { backgroundColor: '#ffffff', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `DetailedReport_${reportType}_${format(reportDate, 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Report image downloaded successfully');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture report');
+      });
+  };
 
   const getRange = () => {
     if (reportType === 'daily') {
@@ -219,9 +242,10 @@ export default function DetailedReports() {
         </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-green-200 bg-green-50/30">
-          <CardHeader className="pb-2 text-green-800">
+      <div className="space-y-6" ref={reportAreaRef}>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="border-green-200 bg-green-50/30">
+            <CardHeader className="pb-2 text-green-800">
             <div className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
               <TrendingUp className="h-3 w-3" /> Total Revenue
             </div>
@@ -273,6 +297,9 @@ export default function DetailedReports() {
           />
         </div>
         <div className="flex gap-2 w-full md:w-auto">
+          <Button variant="outline" className="flex-1 md:flex-none gap-2 border-primary text-primary hover:bg-primary/5" onClick={downloadAsImage}>
+            <Download className="h-4 w-4" /> Download Picture
+          </Button>
           <Button variant="outline" className="flex-1 md:flex-none gap-2" onClick={exportToCSV}>
             <Download className="h-4 w-4" /> Export CSV
           </Button>
@@ -284,13 +311,13 @@ export default function DetailedReports() {
         </div>
       </div>
 
-      <Card className="border-border/50 bg-card/10 backdrop-blur-sm overflow-hidden shadow-xl">
-        <div className="bg-[#38761d] text-white p-4 font-bold flex justify-between items-center border-b-2 border-green-900">
-          <span className="tracking-widest uppercase text-sm">{reportType} Performance Sheet</span>
-          <span className="text-xs opacity-80">{getTimeLabel()}</span>
-        </div>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
+        <Card className="border-border/50 bg-card/10 backdrop-blur-sm overflow-hidden shadow-xl">
+          <div className="bg-[#38761d] text-white p-4 font-bold flex justify-between items-center border-b-2 border-green-900">
+            <span className="tracking-widest uppercase text-sm">{reportType} Performance Sheet</span>
+            <span className="text-xs opacity-80">{getTimeLabel()}</span>
+          </div>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-[#93c47d] hover:bg-[#93c47d] border-b-2 border-green-800">
@@ -348,6 +375,7 @@ export default function DetailedReports() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

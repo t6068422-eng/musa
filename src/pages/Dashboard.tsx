@@ -8,7 +8,9 @@ import {
   ArrowDownRight,
   Activity,
   Calendar,
-  FileBarChart
+  FileBarChart,
+  Download,
+  Image as ImageIcon
 } from 'lucide-react';
 import { collection, query, where, onSnapshot, Timestamp, orderBy, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -16,6 +18,7 @@ import { Product, ProductionEntry, SaleEntry, Client } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { 
   BarChart, 
   Bar, 
@@ -32,6 +35,8 @@ import {
   Legend
 } from 'recharts';
 import { startOfDay, endOfDay, subDays, format, startOfMonth, endOfMonth } from 'date-fns';
+import { toPng } from 'html-to-image';
+import { toast } from 'sonner';
 
 export default function Dashboard() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -41,6 +46,27 @@ export default function Dashboard() {
   const [monthlyStats, setMonthlyStats] = useState<any>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const { user } = useAuth();
+  const dashboardRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadAsImage = () => {
+    if (!dashboardRef.current) return;
+    
+    toast.loading('Capturing dashboard snapshot...');
+    toPng(dashboardRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `Dashboard_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Dashboard snapshot downloaded');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture dashboard');
+      });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -194,12 +220,18 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground">Welcome back to MUSA TRADERS management console.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          <p className="text-muted-foreground">Welcome back to MUSA TRADERS management console.</p>
+        </div>
+        <Button variant="outline" className="gap-2 self-start md:self-auto" onClick={downloadAsImage}>
+          <ImageIcon className="w-4 h-4" /> Download Snapshot
+        </Button>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div ref={dashboardRef} className="space-y-8">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, i) => (
           <Card key={i} className="border-border/50 bg-card/50 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -403,5 +435,6 @@ export default function Dashboard() {
         </Card>
       </div>
     </div>
-  );
+  </div>
+);
 }

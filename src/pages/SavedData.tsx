@@ -29,9 +29,11 @@ import {
   Eye, 
   Calendar as CalendarIcon,
   User as UserIcon,
-  Clock
+  Clock,
+  Image as ImageIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { toPng } from 'html-to-image';
 import {
   Dialog,
   DialogContent,
@@ -65,6 +67,47 @@ export default function SavedData() {
   const [loading, setLoading] = useState(true);
   const [selectedRecord, setSelectedRecord] = useState<StockHistory | null>(null);
   const { user, isAdmin } = useAuth();
+  const summaryRef = React.useRef<HTMLDivElement>(null);
+  const detailRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadSummaryAsImage = () => {
+    if (!summaryRef.current) return;
+    toast.loading('Capturing saved data overview...');
+    toPng(summaryRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `SavedData_Overview_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Overview captured');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture image');
+      });
+  };
+
+  const downloadDetailAsImage = () => {
+    if (!detailRef.current) return;
+    toast.loading('Capturing detailed record...');
+    toPng(detailRef.current, { backgroundColor: '#ffffff', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        const dateStr = selectedRecord ? format(selectedRecord.date.toDate(), 'yyyy-MM-dd') : 'Record';
+        link.download = `StockDetail_${dateStr}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Record captured');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture image');
+      });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -134,12 +177,17 @@ export default function SavedData() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Saved Stock Data</h1>
-        <p className="text-muted-foreground">View and download historical stock control records.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Saved Stock Data</h1>
+          <p className="text-muted-foreground">View and download historical stock control records.</p>
+        </div>
+        <Button onClick={downloadSummaryAsImage} variant="outline" className="gap-2 self-start">
+          <ImageIcon className="w-4 h-4" /> Download Overview (Picture)
+        </Button>
       </div>
 
-      <div className="grid gap-6">
+      <div ref={summaryRef} className="grid gap-6">
         {history.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -188,16 +236,22 @@ export default function SavedData() {
                           </DialogTitle>
                         </DialogHeader>
                         <div className="mt-4">
-                          <div className="mb-4 p-3 bg-accent/50 rounded-lg flex justify-between items-center">
+                          <div className="mb-4 p-3 bg-accent/50 rounded-lg flex flex-wrap gap-2 justify-between items-center">
                             <div className="text-sm">
                               <span className="text-muted-foreground">Saved by:</span> <strong>{record.savedByName}</strong>
                             </div>
-                            <Button size="sm" className="gap-2" onClick={() => downloadCSV(record)}>
-                              <Download className="w-4 h-4" />
-                              Download CSV
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" className="gap-2" onClick={downloadDetailAsImage}>
+                                <ImageIcon className="w-4 h-4" />
+                                Download Picture
+                              </Button>
+                              <Button size="sm" className="gap-2" onClick={() => downloadCSV(record)}>
+                                <Download className="w-4 h-4" />
+                                Download CSV
+                              </Button>
+                            </div>
                           </div>
-                          <div className="rounded-md border overflow-x-auto">
+                          <div ref={detailRef} className="rounded-md border overflow-x-auto bg-white p-2">
                             <Table className="min-w-[800px]">
                               <TableHeader>
                                 <TableRow className="bg-accent/50">

@@ -40,6 +40,8 @@ import {
   eachDayOfInterval,
   isSameDay
 } from 'date-fns';
+import { toPng } from 'html-to-image';
+import { toast } from 'sonner';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -49,6 +51,27 @@ export default function Reports() {
   const [salesData, setSalesData] = useState<SaleEntry[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const { user } = useAuth();
+  const reportRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadAsImage = () => {
+    if (!reportRef.current) return;
+    
+    toast.loading('Exporting report as image...');
+    toPng(reportRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `Report_${period}_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Report downloaded as picture');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to export image');
+      });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -160,16 +183,17 @@ export default function Reports() {
               <TabsTrigger value="monthly">Monthly</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button variant="outline" size="icon" className="hidden sm:flex">
+          <Button variant="outline" size="icon" className="hidden sm:flex" onClick={downloadAsImage}>
             <Download className="w-4 h-4" />
           </Button>
-          <Button variant="outline" className="sm:hidden gap-2">
-            <Download className="w-4 h-4" /> Download
+          <Button variant="outline" className="sm:hidden gap-2" onClick={downloadAsImage}>
+            <Download className="w-4 h-4" /> Download Picture
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="space-y-6" ref={reportRef}>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -278,5 +302,6 @@ export default function Reports() {
         </Card>
       </div>
     </div>
-  );
+  </div>
+);
 }

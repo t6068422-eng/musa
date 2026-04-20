@@ -6,14 +6,38 @@ import { Product, SaleEntry } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Download, Activity } from 'lucide-react';
+import { Download, Activity, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { exportToCSV } from '../lib/export';
+import { toPng } from 'html-to-image';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
 
 export default function PreparedStock() {
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<SaleEntry[]>([]);
   const { user } = useAuth();
+  const reportRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadAsImage = () => {
+    if (!reportRef.current) return;
+    
+    toast.loading('Capturing prepared stock report...');
+    toPng(reportRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `PreparedStock_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Stock report captured');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture image');
+      });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -74,12 +98,18 @@ export default function PreparedStock() {
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Prepared Stock</h2>
           <p className="text-sm md:text-base text-muted-foreground">View total stock prepared (Current Stock + Total Sales).</p>
         </div>
-        <Button onClick={handleExport} variant="outline" className="gap-2 w-full sm:w-auto">
-          <Download className="w-4 h-4" /> Export CSV
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button onClick={downloadAsImage} variant="outline" className="gap-2 flex-1 sm:flex-none">
+            <ImageIcon className="w-4 h-4" /> Download Picture
+          </Button>
+          <Button onClick={handleExport} variant="outline" className="gap-2 flex-1 sm:flex-none">
+            <Download className="w-4 h-4" /> Export CSV
+          </Button>
+        </div>
       </div>
 
-      <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+      <div ref={reportRef} className="space-y-6">
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-primary" />
@@ -114,5 +144,6 @@ export default function PreparedStock() {
         </CardContent>
       </Card>
     </div>
-  );
+  </div>
+);
 }

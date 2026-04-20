@@ -9,6 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { History, Factory, ShoppingCart, User as UserIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
+import { toPng } from 'html-to-image';
+import { toast } from 'sonner';
+import { Download, Image as ImageIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 type Activity = (ProductionEntry | SaleEntry) & { type: 'production' | 'sale' };
 
@@ -16,6 +20,27 @@ export default function ActivityHistory() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [users, setUsers] = useState<Record<string, string>>({});
   const { user } = useAuth();
+  const reportRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadAsImage = () => {
+    if (!reportRef.current) return;
+    
+    toast.loading('Capturing activity history...');
+    toPng(reportRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `ActivityHistory_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Activity history captured');
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.dismiss();
+        toast.error('Failed to capture image');
+      });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -82,12 +107,18 @@ export default function ActivityHistory() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Activity History</h2>
-        <p className="text-muted-foreground">Track who added what and when.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Activity History</h2>
+          <p className="text-muted-foreground">Track who added what and when.</p>
+        </div>
+        <Button onClick={downloadAsImage} variant="outline" className="gap-2">
+          <ImageIcon className="w-4 h-4" /> Download Picture
+        </Button>
       </div>
 
-      <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+      <div ref={reportRef} className="space-y-6">
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <History className="w-5 h-5 text-primary" />
@@ -146,5 +177,6 @@ export default function ActivityHistory() {
         </CardContent>
       </Card>
     </div>
-  );
+  </div>
+);
 }

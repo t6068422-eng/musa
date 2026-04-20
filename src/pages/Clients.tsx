@@ -11,7 +11,9 @@ import {
   Trash2,
   CreditCard,
   FileText,
-  DollarSign
+  DollarSign,
+  Undo2,
+  Download
 } from 'lucide-react';
 import { 
   collection, 
@@ -21,7 +23,10 @@ import {
   orderBy,
   writeBatch,
   doc,
-  addDoc
+  addDoc,
+  setDoc,
+  deleteDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
@@ -58,6 +63,7 @@ import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { toPng } from 'html-to-image';
 
 export default function Clients() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -68,8 +74,43 @@ export default function Clients() {
   const [adjustingClient, setAdjustingClient] = useState<Client | null>(null);
   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Client; direction: 'asc' | 'desc' } | null>(null);
+  const [undoStack, setUndoStack] = useState<{ type: string; data: any }[]>([]);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const tableRef = React.useRef<HTMLDivElement>(null);
+
+  const pushToUndo = (action: { type: string; data: any }) => {
+    setUndoStack(prev => {
+      const newStack = [action, ...prev];
+      return newStack.slice(0, 10); // Keep last 10 steps
+    });
+  };
+
+  const handleUndo = async () => {
+    if (undoStack.length === 0) return;
+    const lastAction = undoStack[0];
+    const remainingStack = undoStack.slice(1);
+
+    try {
+      if (lastAction.type === 'delete') {
+        const clientData = lastAction.data;
+        const { id, ...rest } = clientData;
+        await setDoc(doc(db, 'clients', id), rest);
+        toast.success(`Restored client: ${clientData.name}`);
+      } else if (lastAction.type === 'edit' || lastAction.type === 'adjust') {
+        const { id, prevState } = lastAction.data;
+        await updateDoc(doc(db, 'clients', id), prevState);
+        toast.success(`Reverted changes for ${prevState.name}`);
+      } else if (lastAction.type === 'add') {
+        await deleteDoc(doc(db, 'clients', lastAction.data.id));
+        toast.success(`Removed added client: ${lastAction.data.name}`);
+      }
+      setUndoStack(remainingStack);
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to undo last action');
+    }
+  };
 
   const [formData, setFormData] = useState({
     name: '',
@@ -101,15 +142,23 @@ export default function Clients() {
     try {
       if (editingClient) {
         const clientRef = doc(db, 'clients', editingClient.id);
-        const batch = writeBatch(db);
-        batch.update(clientRef, {
+        const prevState = {
+          name: editingClient.name,
+          phone: editingClient.phone,
+          email: editingClient.email || '',
+          address: editingClient.address || '',
+          creditBalance: editingClient.creditBalance || 0
+        };
+        
+        await updateDoc(clientRef, {
           ...formData,
           creditBalance: Number(formData.creditBalance)
         });
-        await batch.commit();
+        
+        pushToUndo({ type: 'edit', data: { id: editingClient.id, prevState } });
         toast.success('Client updated successfully');
       } else {
-        await addDoc(collection(db, 'clients'), {
+        const docRef = await addDoc(collection(db, 'clients'), {
           ...formData,
           creditBalance: Number(formData.creditBalance),
           createdAt: Timestamp.now(),
@@ -117,6 +166,8 @@ export default function Clients() {
           totalQuantity: 0,
           lastPurchaseDate: null
         });
+        
+        pushToUndo({ type: 'add', data: { id: docRef.id, name: formData.name } });
         toast.success('Client added successfully');
       }
       setIsAddDialogOpen(false);
@@ -137,7 +188,15 @@ export default function Clients() {
       const currentBalance = adjustingClient.creditBalance || 0;
       const newBalance = currentBalance + Number(adjustmentAmount);
 
-      await writeBatch(db).update(clientRef, { creditBalance: newBalance }).commit();
+      await updateDoc(clientRef, { creditBalance: newBalance });
+      
+      pushToUndo({ 
+        type: 'adjust', 
+        data: { 
+          id: adjustingClient.id, 
+          prevState: { ...adjustingClient, creditBalance: currentBalance } 
+        } 
+      });
       
       toast.success(`Balance adjusted: New balance Rs. ${newBalance.toLocaleString()}`);
       setAdjustingClient(null);
@@ -150,9 +209,8 @@ export default function Clients() {
   const handleDeleteClient = async () => {
     if (!clientToDelete) return;
     try {
-      const batch = writeBatch(db);
-      batch.delete(doc(db, 'clients', clientToDelete.id));
-      await batch.commit();
+      await deleteDoc(doc(db, 'clients', clientToDelete.id));
+      pushToUndo({ type: 'delete', data: clientToDelete });
       toast.success('Client deleted successfully');
       setClientToDelete(null);
     } catch (error) {
@@ -191,6 +249,26 @@ export default function Clients() {
       return 0;
     });
 
+  const downloadAsImage = () => {
+    if (!tableRef.current) return;
+    
+    toast.loading('Preparing image download...');
+    toPng(tableRef.current, { backgroundColor: '#ffffff', cacheBust: true })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `ClientDirectory_${format(new Date(), 'yyyy-MM-dd')}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.dismiss();
+        toast.success('Image downloaded successfully');
+      })
+      .catch((err) => {
+        console.error('oops, something went wrong!', err);
+        toast.dismiss();
+        toast.error('Failed to download image');
+      });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -199,17 +277,28 @@ export default function Clients() {
           <p className="text-muted-foreground">Maintain your client database and track their activity.</p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
-          setIsAddDialogOpen(open);
-          if (!open) {
-            setEditingClient(null);
-            setFormData({ name: '', phone: '', email: '', address: '', creditBalance: 0 });
-          }
-        }}>
-          <DialogTrigger render={<Button className="gap-2 bg-primary text-primary-foreground" />}>
-            <Plus className="w-4 h-4" /> New Client
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+        <div className="flex items-center gap-2">
+          {undoStack.length > 0 && (
+            <Button variant="outline" size="sm" onClick={handleUndo} className="gap-2">
+              <Undo2 className="w-4 h-4" /> Undo ({undoStack.length})
+            </Button>
+          )}
+
+          <Button variant="outline" size="sm" onClick={downloadAsImage} className="gap-2">
+            <Download className="w-4 h-4" /> Download Picture
+          </Button>
+
+          <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+            setIsAddDialogOpen(open);
+            if (!open) {
+              setEditingClient(null);
+              setFormData({ name: '', phone: '', email: '', address: '', creditBalance: 0 });
+            }
+          }}>
+            <DialogTrigger render={<Button className="gap-2 bg-primary text-primary-foreground" />}>
+              <Plus className="w-4 h-4" /> New Client
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>{editingClient ? 'Edit Client' : 'Add New Client'}</DialogTitle>
               <DialogDescription>
@@ -275,6 +364,7 @@ export default function Clients() {
           </DialogContent>
         </Dialog>
       </div>
+    </div>
 
       <div className="grid gap-6 md:grid-cols-4">
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
@@ -315,7 +405,7 @@ export default function Clients() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0" ref={tableRef}>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
