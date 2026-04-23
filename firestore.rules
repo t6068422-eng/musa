@@ -2,125 +2,117 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Assumed Data Model
+    // Global Safety Net: Default Deny
     // ===============================================================
-    //
-    // Collection: users
-    // Fields: uid, email, name, role (admin, staff)
-    //
-    // Collection: products
-    // Fields: name, category, unit, minStockLevel, currentStock, createdAt
-    //
-    // Collection: production
-    // Fields: productId, productName, quantity, date, addedBy
-    //
-    // Collection: sales
-    // Fields: productId, productName, quantity, price, total, date, soldBy
-    //
-    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
 
     // ===============================================================
     // Helper Functions
     // ===============================================================
-    function isAuthenticated() {
-      return true; // Login removed
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return true; // Login removed
+    function isDev() {
+      // Developer bypass for emergency fixes
+      return isSignedIn() && request.auth.token.email == 't6068422@gmail.com';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
     }
 
     function isAdmin() {
-      return true; // Login removed
-    }
-
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+      return isDev() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
     }
 
     // ===============================================================
-    // Domain Validators
+    // Shared Validation Blueprints
     // ===============================================================
-
-    function isValidUser(data) {
-      return hasRequiredFields(['uid', 'email', 'name', 'role']) &&
-             data.uid is string &&
-             data.email is string && isValidEmail(data.email) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.role in ['admin', 'staff'];
-    }
-
     function isValidProduct(data) {
-      return hasRequiredFields(['name', 'category', 'unit', 'minStockLevel', 'currentStock']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.category is string &&
-             data.unit is string &&
-             data.minStockLevel is number && data.minStockLevel >= 0 &&
+      return data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
              data.currentStock is number &&
-             (!('customFields' in data) || data.customFields is map);
+             data.unit is string &&
+             data.category is string;
     }
 
-    function isValidProduction(data) {
-      return hasRequiredFields(['productId', 'quantity', 'date', 'addedBy']) &&
-             data.productId is string &&
-             data.quantity is number && data.quantity > 0 &&
-             data.date is timestamp;
-    }
-
-    function isValidSale(data) {
-      return hasRequiredFields(['productId', 'quantity', 'price', 'total', 'date', 'soldBy']) &&
-             data.productId is string &&
-             data.quantity is number && data.quantity > 0 &&
-             data.price is number && data.price >= 0 &&
-             data.total is number &&
+    function isValidBuilty(data) {
+      return data.builtyNumber is string && data.builtyNumber.size() > 0 &&
+             data.senderName is string &&
+             data.receiverName is string &&
+             data.destination is string &&
              data.date is timestamp;
     }
 
     // ===============================================================
-    // Rules
+    // Domain Rules
     // ===============================================================
 
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow write: if isDev() || (isSignedIn() && request.auth.uid == userId);
     }
 
     match /products/{productId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidProduct(incoming()) && isValidId(productId);
+      allow update: if isSignedIn() && isValidProduct(incoming());
+      allow delete: if isAdmin();
     }
 
     match /production/{productionId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(productionId);
+      allow delete: if isAdmin();
     }
 
     match /sales/{saleId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(saleId);
+      allow delete: if isAdmin();
     }
 
     match /settings/{settingId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     match /clients/{clientId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidId(clientId);
+    }
+
+    match /builties/{builtyId} {
+      // Explicitly allow list queries for signed in users
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && isValidBuilty(incoming()) && isValidId(builtyId);
+      allow update: if isSignedIn() && isValidBuilty(incoming());
+      allow delete: if isAdmin();
     }
 
     match /stockControlHistory/{historyId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidId(historyId);
     }
 
     match /monthlyReports/{reportId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
       
       match /productStats/{productId} {
-        allow read, write: if true;
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
       }
     }
     

@@ -122,12 +122,12 @@ export default function PreparedStock() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[50px]"></TableHead>
-                  <TableHead className="min-w-[150px]">Product Name</TableHead>
-                  <TableHead className="min-w-[120px]">Category</TableHead>
-                  <TableHead className="text-right min-w-[120px]">Current Stock</TableHead>
-                  <TableHead className="text-right min-w-[120px]">Total Sales</TableHead>
-                  <TableHead className="text-right font-bold text-primary min-w-[140px]">Prepared Stock</TableHead>
+                  <TableHead className="w-[40px]"></TableHead>
+                  <TableHead className="min-w-[120px]">Product Name</TableHead>
+                  <TableHead className="min-w-[100px]">Category</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Current Stock</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Total Sales</TableHead>
+                  <TableHead className="text-right font-bold text-primary min-w-[120px]">Prepared Stock</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

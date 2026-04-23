@@ -68,7 +68,7 @@ export default function SavedData() {
   const [history, setHistory] = useState<StockHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRecord, setSelectedRecord] = useState<StockHistory | null>(null);
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, quotaExceeded } = useAuth();
   const summaryRef = React.useRef<HTMLDivElement>(null);
   const detailRef = React.useRef<HTMLDivElement>(null);
 
@@ -129,6 +129,7 @@ export default function SavedData() {
       return;
     }
 
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     if (!confirm('Are you sure you want to delete this record?')) return;
 
     try {

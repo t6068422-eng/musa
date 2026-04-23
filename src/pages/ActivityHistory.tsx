@@ -126,18 +126,20 @@ export default function ActivityHistory() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0 md:p-6">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[120px]">Time</TableHead>
-                  <TableHead className="min-w-[100px]">Type</TableHead>
-                  <TableHead className="min-w-[120px]">User</TableHead>
-                  <TableHead className="min-w-[150px]">Product</TableHead>
-                  <TableHead className="text-right">Quantity</TableHead>
-                  <TableHead className="text-right">Details</TableHead>
-                </TableRow>
-              </TableHeader>
+          <div className="overflow-hidden border rounded-lg">
+            <div className="overflow-x-auto scrollbar-custom">
+              <div className="max-h-[500px] overflow-y-auto scrollbar-custom">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background z-20 shadow-md border-b">
+                    <TableRow>
+                      <TableHead className="min-w-[120px] bg-background font-bold text-foreground">Time</TableHead>
+                      <TableHead className="min-w-[100px] bg-background font-bold text-foreground">Type</TableHead>
+                      <TableHead className="min-w-[120px] bg-background font-bold text-foreground">User</TableHead>
+                      <TableHead className="min-w-[150px] bg-background font-bold text-foreground">Product</TableHead>
+                      <TableHead className="text-right bg-background font-bold text-foreground">Quantity</TableHead>
+                      <TableHead className="text-right bg-background font-bold text-foreground">Details</TableHead>
+                    </TableRow>
+                  </TableHeader>
               <TableBody>
                 {activities.map((activity) => {
                   const isProduction = activity.type === 'production';
@@ -174,7 +176,9 @@ export default function ActivityHistory() {
               </TableBody>
             </Table>
           </div>
-        </CardContent>
+        </div>
+      </div>
+    </CardContent>
       </Card>
     </div>
   </div>

@@ -58,7 +58,7 @@ export default function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, quotaExceeded } = useAuth();
   const tableRef = React.useRef<HTMLDivElement>(null);
 
   const downloadAsImage = () => {
@@ -113,6 +113,7 @@ export default function Products() {
   };
 
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -141,6 +142,7 @@ export default function Products() {
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return toast.error('Only admins can add products');
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
 
     try {
       await addDoc(collection(db, 'products'), {
@@ -162,6 +164,7 @@ export default function Products() {
   const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
 
     try {
       await updateDoc(doc(db, 'products', editingProduct.id), {
@@ -180,13 +183,21 @@ export default function Products() {
   const handleDeleteProduct = async () => {
     if (!productToDelete) return;
     if (!isAdmin) return toast.error('Only admins can delete products');
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
 
+    setIsDeleting(true);
     try {
       await deleteDoc(doc(db, 'products', productToDelete));
       toast.success('Product deleted');
       setProductToDelete(null);
     } catch (error: any) {
-      toast.error('Failed to delete product');
+      if (error?.code === 'resource-exhausted') {
+        toast.error('Quota Limit: Cannot delete from cloud.');
+      } else {
+        toast.error('Failed to delete product');
+      }
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -412,8 +423,10 @@ export default function Products() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setProductToDelete(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteProduct}>Delete Product</Button>
+            <Button variant="outline" onClick={() => setProductToDelete(null)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteProduct} disabled={isDeleting}>
+              {isDeleting ? 'Deleting...' : 'Delete Product'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

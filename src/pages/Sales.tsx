@@ -63,7 +63,7 @@ export default function Sales() {
   const [clients, setClients] = useState<Client[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedSale, setSelectedSale] = useState<SaleEntry | null>(null);
-  const { user } = useAuth();
+  const { user, isAdmin, quotaExceeded } = useAuth();
   const salesRef = React.useRef<HTMLDivElement>(null);
 
   const downloadAsImage = () => {
@@ -161,6 +161,7 @@ export default function Sales() {
   });
 
   const [logToDelete, setLogToDelete] = useState<SaleEntry | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -194,7 +195,9 @@ export default function Sales() {
 
   const handleDeleteLog = async () => {
     if (!logToDelete) return;
+    if (quotaExceeded) return toast.error('Cloud actions disabled: Daily quota reached.');
 
+    setIsDeleting(true);
     try {
       const batch = writeBatch(db);
       const productRef = doc(db, 'products', logToDelete.productId);
@@ -224,13 +227,20 @@ export default function Sales() {
       setLogToDelete(null);
     } catch (error: any) {
       console.error(error);
-      toast.error('Failed to delete sale log');
+      if (error?.code === 'resource-exhausted') {
+        toast.error('Quota Limit: Cannot delete from cloud.');
+      } else {
+        toast.error('Failed to delete sale log');
+      }
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   const handleAddSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (quotaExceeded) return toast.error('Cloud actions disabled: Daily quota reached.');
     if (!formData.productId || formData.quantity <= 0 || formData.price < 0) {
       return toast.error('Please fill in all fields correctly');
     }
@@ -404,19 +414,21 @@ export default function Sales() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0 md:p-6">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[120px]">Date</TableHead>
-                    <TableHead className="w-[40px]"></TableHead>
-                    <TableHead className="min-w-[150px]">Product</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Qty</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
+            <div className="overflow-hidden border rounded-lg">
+              <div className="overflow-x-auto scrollbar-custom">
+                <div className="max-h-[500px] overflow-y-auto scrollbar-custom">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background z-20 shadow-md border-b">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="min-w-[120px] bg-background font-bold text-foreground py-4">Date</TableHead>
+                        <TableHead className="w-[40px] bg-background"></TableHead>
+                        <TableHead className="min-w-[150px] bg-background font-bold text-foreground py-4">Product</TableHead>
+                        <TableHead className="bg-background font-bold text-foreground py-4">Client</TableHead>
+                        <TableHead className="bg-background font-bold text-foreground py-4">Qty</TableHead>
+                        <TableHead className="bg-background font-bold text-foreground py-4">Total</TableHead>
+                        <TableHead className="text-right bg-background font-bold text-foreground py-4">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
                 <TableBody>
                   {salesLogs.length === 0 ? (
                     <TableRow>
@@ -454,15 +466,17 @@ export default function Sales() {
                             >
                               <Printer className="w-4 h-4" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="text-destructive hover:bg-destructive/10 h-10 w-10"
-                              onClick={() => setLogToDelete(log)}
-                              title="Delete Sale"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            {isAdmin && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="text-destructive hover:bg-destructive/10 h-10 w-10"
+                                onClick={() => setLogToDelete(log)}
+                                title="Delete Sale"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -471,7 +485,9 @@ export default function Sales() {
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
+          </div>
+        </div>
+      </CardContent>
         </Card>
 
         {/* Delete Confirmation Dialog */}
@@ -484,8 +500,10 @@ export default function Sales() {
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => setLogToDelete(null)}>Cancel</Button>
-              <Button variant="destructive" onClick={handleDeleteLog}>Delete Log</Button>
+              <Button variant="outline" onClick={() => setLogToDelete(null)} disabled={isDeleting}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDeleteLog} disabled={isDeleting}>
+                {isDeleting ? 'Deleting...' : 'Delete Log'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

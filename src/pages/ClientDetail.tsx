@@ -25,6 +25,7 @@ import {
   query, 
   where, 
   orderBy,
+  limit,
   Timestamp,
   writeBatch,
   updateDoc,
@@ -32,8 +33,22 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
-import { Client, SaleEntry, Product } from '../types';
+import { 
+  Tabs, 
+  TabsContent, 
+  TabsList, 
+  TabsTrigger 
+} from '@/components/ui/tabs';
+import { 
+  CheckCircle2, 
+  Truck, 
+  Clock as ClockIcon, 
+  AlertCircle,
+  X
+} from 'lucide-react';
+import { Client, SaleEntry, Product, Builty } from '../types';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   Table, 
@@ -70,14 +85,16 @@ import { toPng } from 'html-to-image';
 export default function ClientDetail() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, quotaExceeded } = useAuth();
   const pageRef = React.useRef<HTMLDivElement>(null);
   
   const [client, setClient] = useState<Client | null>(null);
   const [purchaseHistory, setPurchaseHistory] = useState<SaleEntry[]>([]);
+  const [builties, setBuilties] = useState<Builty[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false);
   const [editingSale, setEditingSale] = useState<SaleEntry | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<SaleEntry | null>(null);
@@ -156,12 +173,32 @@ export default function ClientDetail() {
       setLoading(false);
     });
 
+    // Fetch client builties
+    // We filter locally by name since clientId isn't in builty schema yet
+    // Limit to 200 recent builties to avoid massive READ hits
+    const qBuilties = query(
+      collection(db, 'builties'),
+      orderBy('date', 'desc'),
+      limit(200)
+    );
+
+    const unsubscribeBuilties = onSnapshot(qBuilties, (snapshot) => {
+      if (!client?.name) return;
+      const allBuilties = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Builty));
+      // Filter by receiver name
+      setBuilties(allBuilties.filter(b => 
+        (b.receiverName?.toLowerCase() || '').includes(client.name.toLowerCase()) ||
+        (b.senderName?.toLowerCase() || '').includes(client.name.toLowerCase())
+      ));
+    });
+
     return () => {
       unsubscribeClient();
       unsubscribeHistory();
       unsubscribeProducts();
+      unsubscribeBuilties();
     };
-  }, [user, clientId, navigate]);
+  }, [user, clientId, navigate, client?.name]);
 
   const handleProductSelect = (pId: string) => {
     const product = products.find(p => p.id === pId);
@@ -177,6 +214,7 @@ export default function ClientDetail() {
   const handleManualSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !client || !clientId) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     if (!formData.productId || formData.quantity <= 0) {
       return toast.error('Please select a product and valid quantity');
     }
@@ -248,6 +286,7 @@ export default function ClientDetail() {
   const handleUpdateSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !client || !editingSale || !clientId) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
 
     const newProduct = products.find(p => p.id === editSaleData.productId);
     if (!newProduct) return toast.error('Invalid product selected');
@@ -324,6 +363,7 @@ export default function ClientDetail() {
 
   const handleDeleteSale = async () => {
     if (!user || !client || !clientId || !saleToDelete) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
 
     setSubmitting(true);
     try {
@@ -362,6 +402,7 @@ export default function ClientDetail() {
 
   const handleUndo = async () => {
     if (undoStack.length === 0 || !clientId) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     const [lastAction, ...remainingStack] = undoStack;
     
     try {
@@ -407,17 +448,40 @@ export default function ClientDetail() {
     }
   };
 
-  const filteredHistory = purchaseHistory.filter(h => 
-    h.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    h.id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredHistory = purchaseHistory.filter(h => {
+    const matchesSearch = h.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         h.id.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    let matchesDate = true;
+    if (dateRange.start || dateRange.end) {
+      const saleDate = h.date.toDate();
+      if (dateRange.start) {
+        const startDate = new Date(dateRange.start);
+        startDate.setHours(0, 0, 0, 0);
+        if (saleDate < startDate) matchesDate = false;
+      }
+      if (dateRange.end) {
+        const endDate = new Date(dateRange.end);
+        endDate.setHours(23, 59, 59, 999);
+        if (saleDate > endDate) matchesDate = false;
+      }
+    }
+    
+    return matchesSearch && matchesDate;
+  });
 
   const exportReport = () => {
     if (!client) return;
     
-    // Simple CSV export
+    // Use filteredHistory instead of full purchaseHistory
+    const targetData = filteredHistory;
+    
+    if (targetData.length === 0) {
+      return toast.error('No records found for the selected criteria');
+    }
+
     const headers = ['Date', 'Invoice ID', 'Product', 'Quantity', 'Price', 'Total'];
-    const rows = filteredHistory.map(h => [
+    const rows = targetData.map(h => [
       format(h.date.toDate(), 'yyyy-MM-dd HH:mm'),
       h.id,
       h.productName,
@@ -435,7 +499,10 @@ export default function ClientDetail() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `PurchaseHistory_${client.name.replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    const dateStr = dateRange.start || dateRange.end 
+      ? `_${dateRange.start || 'any'}_to_${dateRange.end || 'today'}`
+      : `_${format(new Date(), 'yyyy-MM-dd')}`;
+    a.download = `ActivityLog_${client.name.replace(/\s+/g, '_')}${dateStr}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
     toast.success('Report exported successfully');
@@ -483,7 +550,70 @@ export default function ClientDetail() {
         </div>
       </div>
 
+      <Tabs defaultValue="purchases" className="w-full space-y-6">
       <div ref={pageRef} className="space-y-6">
+        <div className="border-b border-border/50">
+          <TabsList className="flex h-auto p-0 bg-transparent gap-8 justify-start">
+            <TabsTrigger 
+              value="purchases" 
+              className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-2 pb-3 pt-1 text-sm font-semibold transition-all data-[state=active]:border-primary data-[state=active]:text-primary hover:text-primary/70 bg-transparent shadow-none"
+            >
+              <ShoppingCart className="w-4 h-4" /> 
+              Purchase History
+            </TabsTrigger>
+            <TabsTrigger 
+              value="builties" 
+              className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-2 pb-3 pt-1 text-sm font-semibold transition-all data-[state=active]:border-primary data-[state=active]:text-primary hover:text-primary/70 bg-transparent shadow-none"
+            >
+              <Truck className="w-4 h-4" /> 
+              Consignments
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm shadow-sm overflow-hidden">
+          <CardHeader className="py-3 px-6 bg-accent/30 border-b border-border/50">
+            <CardTitle className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Main Identity & Details</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 items-center">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-primary/10 rounded-xl">
+                  <Phone className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">Phone Number</p>
+                  <p className="text-base font-bold text-foreground">{client.phone}</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-primary/10 rounded-xl">
+                  <Mail className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">Email Address</p>
+                  <p className="text-base font-bold text-foreground">{client.email || 'None provided'}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 lg:col-span-2">
+                <div className="p-3 bg-primary/10 rounded-xl">
+                  <MapPin className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">Physical Address / Location</p>
+                  <p className="text-base font-bold text-foreground truncate">{client.address || 'No address on file'}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-border/40 flex justify-between items-center text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+              <span>Client Since: {format(client.createdAt.toDate(), 'MMM yyyy')}</span>
+              <span>Last Purchase: {client.lastPurchaseDate ? format(client.lastPurchaseDate.toDate(), 'PPP') : 'No history'}</span>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid gap-6 md:grid-cols-4">
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader className="pb-2">
@@ -540,154 +670,252 @@ export default function ClientDetail() {
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-12">
-        <Card className="md:col-span-8 border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg font-semibold flex items-center gap-2">
-              <History className="w-5 h-5 text-primary" />
-              Purchase History
-            </CardTitle>
-            <div className="flex items-center gap-3">
-              <Dialog open={isManualEntryOpen} onOpenChange={setIsManualEntryOpen}>
-                <DialogTrigger render={<Button variant="outline" size="sm" className="gap-2 border-primary/50 text-primary hover:bg-primary/5" />}>
-                  <Plus className="w-3 h-3" /> Log Manual Purchase
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>Log Manual Purchase</DialogTitle>
-                    <DialogDescription>
-                      Record a transaction for <strong>{client.name}</strong> manually.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleManualSale} className="space-y-4 py-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="product">Product</Label>
-                      <Select onValueChange={handleProductSelect} value={formData.productId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select product" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {products.map(p => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.name} ({p.currentStock} {p.unit} in stock)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+      <div className="space-y-6">
+        <TabsContent value="purchases" className="mt-0">
+              <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+                <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <History className="w-5 h-5 text-primary" />
+                    Activity Logs
+                  </CardTitle>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                       <Label className="text-[10px] uppercase text-muted-foreground whitespace-nowrap">From:</Label>
+                       <Input 
+                        type="date" 
+                        className="h-8 w-28 text-[10px]" 
+                        value={dateRange.start}
+                        onChange={e => setDateRange({...dateRange, start: e.target.value})}
+                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="quantity">Quantity</Label>
-                        <Input 
-                          id="quantity" 
-                          type="number" 
-                          value={formData.quantity} 
-                          onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })}
-                          min="1"
-                          required
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="price">Unit Price (Rs.)</Label>
-                        <Input 
-                          id="price" 
-                          type="number" 
-                          step="0.01"
-                          value={formData.price} 
-                          onChange={e => setFormData({ ...formData, price: Number(e.target.value) })}
-                          min="0"
-                          required
-                        />
-                      </div>
+                    <div className="flex items-center gap-2">
+                       <Label className="text-[10px] uppercase text-muted-foreground whitespace-nowrap">To:</Label>
+                       <Input 
+                        type="date" 
+                        className="h-8 w-28 text-[10px]"
+                        value={dateRange.end}
+                        onChange={e => setDateRange({...dateRange, end: e.target.value})}
+                       />
                     </div>
-                    <div className="p-3 rounded-lg bg-accent/50 border border-border/50 text-center">
-                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-widest mb-1">Total Calculation</p>
-                      <p className="text-2xl font-bold text-primary">Rs. {(formData.quantity * formData.price).toLocaleString()}</p>
-                    </div>
-                    <DialogFooter>
-                      <Button type="button" variant="outline" onClick={() => setIsManualEntryOpen(false)}>Cancel</Button>
-                      <Button type="submit" disabled={submitting}>
-                        {submitting ? 'Recording...' : 'Save Purchase'}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
-              <div className="relative w-48 scale-90 origin-right">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search history..."
-                  className="pl-9 h-9"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Product Name</TableHead>
-                    <TableHead>Qty</TableHead>
-                    <TableHead>Unit Price</TableHead>
-                    <TableHead className="text-right">Total Price</TableHead>
-                    {isAdmin && <TableHead className="text-right">Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredHistory.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-12 text-muted-foreground italic">
-                        {loading ? 'Loading records...' : 'No purchase records found.'}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredHistory.map((history) => (
-                      <TableRow key={history.id}>
-                        <TableCell className="text-xs whitespace-nowrap">
-                          {format(history.date.toDate(), 'MMM dd, yyyy HH:mm')}
-                        </TableCell>
-                        <TableCell className="font-medium whitespace-nowrap">
-                          {history.productName}
-                        </TableCell>
-                        <TableCell>{history.quantity}</TableCell>
-                        <TableCell>Rs. {history.price.toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-bold">
-                          Rs. {history.total.toLocaleString()}
-                        </TableCell>
-                        {isAdmin && (
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-primary hover:bg-primary/10"
-                                onClick={() => handleEditSale(history)}
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                onClick={() => setSaleToDelete(history)}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                    <Dialog open={isManualEntryOpen} onOpenChange={setIsManualEntryOpen}>
+                      <DialogTrigger render={<Button variant="outline" size="sm" className="gap-2 border-primary/50 text-primary hover:bg-primary/5 h-8" />}>
+                        <Plus className="w-3 h-3" /> Log Manual Purchase
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                          <DialogTitle>Log Manual Purchase</DialogTitle>
+                          <DialogDescription>
+                            Record a transaction for <strong>{client.name}</strong> manually.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleManualSale} className="space-y-4 py-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="product">Product</Label>
+                            <Select onValueChange={handleProductSelect} value={formData.productId}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select product" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {products.map(p => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.name} ({p.currentStock} {p.unit} in stock)
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                              <Label htmlFor="quantity">Quantity</Label>
+                              <Input 
+                                id="quantity" 
+                                type="number" 
+                                value={formData.quantity} 
+                                onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })}
+                                min="1"
+                                required
+                              />
                             </div>
-                          </TableCell>
+                            <div className="grid gap-2">
+                              <Label htmlFor="price">Unit Price (Rs.)</Label>
+                              <Input 
+                                id="price" 
+                                type="number" 
+                                step="0.01"
+                                value={formData.price} 
+                                onChange={e => setFormData({ ...formData, price: Number(e.target.value) })}
+                                min="0"
+                                required
+                              />
+                            </div>
+                          </div>
+                          <div className="p-3 rounded-lg bg-accent/50 border border-border/50 text-center">
+                            <p className="text-xs text-muted-foreground uppercase font-bold tracking-widest mb-1">Total Calculation</p>
+                            <p className="text-2xl font-bold text-primary">Rs. {(formData.quantity * formData.price).toLocaleString()}</p>
+                          </div>
+                          <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setIsManualEntryOpen(false)}>Cancel</Button>
+                            <Button type="submit" disabled={submitting}>
+                              {submitting ? 'Recording...' : 'Save Purchase'}
+                            </Button>
+                          </DialogFooter>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                    <div className="relative w-40">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search history..."
+                        className="pl-9 h-8 text-[10px]"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-hidden border-x border-b">
+                    <div className="overflow-x-auto scrollbar-custom">
+                      <div className="max-h-[400px] overflow-y-auto scrollbar-custom pr-1">
+                        <Table className="min-w-[800px]">
+                          <TableHeader className="sticky top-0 bg-background z-30 shadow-md">
+                            <TableRow className="hover:bg-transparent border-b-2">
+                              <TableHead className="bg-background font-bold text-foreground py-4 px-6">Date</TableHead>
+                              <TableHead className="bg-background font-bold text-foreground py-4">Product Name</TableHead>
+                              <TableHead className="bg-background font-bold text-foreground py-4">Qty</TableHead>
+                              <TableHead className="bg-background font-bold text-foreground py-4">Unit Price</TableHead>
+                              <TableHead className="text-right bg-background font-bold text-foreground py-4 pr-6">Total Price</TableHead>
+                              {isAdmin && <TableHead className="text-right bg-background font-bold text-foreground py-4 pr-6">Actions</TableHead>}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredHistory.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-12 text-muted-foreground italic">
+                                  {loading ? 'Loading records...' : 'No purchase records found.'}
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              filteredHistory.map((history) => (
+                                <TableRow key={history.id}>
+                                  <TableCell className="text-xs whitespace-nowrap px-6">
+                                    {format(history.date.toDate(), 'MMM dd, yyyy HH:mm')}
+                                  </TableCell>
+                                  <TableCell className="font-medium whitespace-nowrap">
+                                    {history.productName}
+                                  </TableCell>
+                                  <TableCell>{history.quantity}</TableCell>
+                                  <TableCell>Rs. {history.price.toLocaleString()}</TableCell>
+                                  <TableCell className="text-right font-bold pr-6">
+                                    Rs. {history.total.toLocaleString()}
+                                  </TableCell>
+                                  {isAdmin && (
+                                    <TableCell className="text-right pr-6">
+                                      <div className="flex justify-end gap-1">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-8 w-8 text-primary hover:bg-primary/10"
+                                          onClick={() => handleEditSale(history)}
+                                        >
+                                          <Edit2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                          onClick={() => setSaleToDelete(history)}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  )}
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="builties" className="mt-4">
+              <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <Truck className="w-5 h-5 text-primary" />
+                    Related Consignments
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-hidden border-x border-b">
+                    <div className="overflow-x-auto scrollbar-custom">
+                      <div className="max-h-[400px] overflow-y-auto scrollbar-custom pr-1">
+                        <Table className="min-w-[800px]">
+                          <TableHeader className="sticky top-0 bg-background z-30 shadow-md">
+                            <TableRow className="hover:bg-transparent border-b-2">
+                              <TableHead className="bg-background font-bold text-foreground py-4 px-6">Builty #</TableHead>
+                              <TableHead className="bg-background font-bold text-foreground py-4">Date</TableHead>
+                              <TableHead className="bg-background font-bold text-foreground py-4">Destination</TableHead>
+                              <TableHead className="text-center bg-background font-bold text-foreground py-4">Status</TableHead>
+                              <TableHead className="text-right bg-background font-bold text-foreground py-4 pr-6">Freight</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                        <TableBody>
+                        {builties.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center py-12 text-muted-foreground italic">
+                              No builties found for this client.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          builties.map((builty) => (
+                            <TableRow 
+                              key={builty.id} 
+                              className="cursor-pointer hover:bg-accent/50" 
+                              onClick={() => navigate(`/builties/${builty.id}`)}
+                            >
+                              <TableCell className="font-bold text-primary px-6">
+                                {builty.builtyNumber}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {format(builty.date.toDate(), 'dd MMM yyyy')}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="w-3 h-3 opacity-50" /> {builty.destination}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {(() => {
+                                  switch (builty.status) {
+                                    case 'pending': return <Badge variant="outline" className="gap-1"><ClockIcon className="w-3 h-3" /> Pending</Badge>;
+                                    case 'in-transit': return <Badge variant="secondary" className="gap-1 bg-blue-100 text-blue-700"><Truck className="w-3 h-3" /> In Transit</Badge>;
+                                    case 'delivered': return <Badge variant="secondary" className="gap-1 bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-3 h-3" /> Delivered</Badge>;
+                                    case 'cancelled': return <Badge variant="destructive" className="gap-1"><AlertCircle className="w-3 h-3" /> Cancelled</Badge>;
+                                  }
+                                })()}
+                              </TableCell>
+                              <TableCell className="text-right font-medium pr-6">
+                                Rs. {builty.freightAmount?.toLocaleString()}
+                              </TableCell>
+                            </TableRow>
+                          ))
                         )}
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+            </Card>
+          </TabsContent>
+        </div>
+      </div>
 
         {/* Edit History Dialog */}
         <Dialog open={!!editingSale} onOpenChange={(open) => !open && setEditingSale(null)}>
@@ -792,51 +1020,7 @@ export default function ClientDetail() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        <Card className="md:col-span-4 border-border/50 bg-card/50 backdrop-blur-sm h-fit">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">Client Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="mt-1 bg-accent/50 p-2 rounded-md">
-                  <Phone className="w-4 h-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium uppercase">Phone</p>
-                  <p className="text-sm font-semibold">{client.phone}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="mt-1 bg-accent/50 p-2 rounded-md">
-                  <Mail className="w-4 h-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium uppercase">Email</p>
-                  <p className="text-sm font-semibold">{client.email || 'Not provided'}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="mt-1 bg-accent/50 p-2 rounded-md">
-                  <MapPin className="w-4 h-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium uppercase">Address</p>
-                  <p className="text-sm font-semibold">{client.address || 'No address saved'}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="pt-4 border-t border-border">
-              <p className="text-xs text-muted-foreground mb-2 italic">
-                Last activity: {client.lastPurchaseDate ? format(client.lastPurchaseDate.toDate(), 'PPP') : 'N/A'}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      </Tabs>
     </div>
-  </div>
-);
+  );
 }

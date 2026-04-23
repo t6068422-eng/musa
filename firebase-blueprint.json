@@ -143,6 +143,40 @@
         "price": { "type": "number" }
       },
       "required": ["productId", "productName", "production", "qtySold", "revenue"]
+    },
+    "Builty": {
+      "title": "Builty",
+      "description": "Consignment note or shipping document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "builtyNumber": { "type": "string" },
+        "senderName": { "type": "string" },
+        "receiverName": { "type": "string" },
+        "destination": { "type": "string" },
+        "transportName": { "type": "string" },
+        "totalItems": { "type": "number" },
+        "weight": { "type": "string" },
+        "freightAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "in-transit", "delivered", "cancelled"] },
+        "date": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "productName": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" }
+            },
+            "required": ["productId", "productName", "quantity", "price"]
+          }
+        }
+      },
+      "required": ["builtyNumber", "senderName", "receiverName", "destination", "date", "createdAt"]
     }
   },
   "firestore": {
@@ -161,6 +195,10 @@
     "/clients/{clientId}": {
       "schema": "Client",
       "description": "Client database"
+    },
+    "/builties/{builtyId}": {
+      "schema": "Builty",
+      "description": "Logistics and shipping records"
     },
     "/production/{productionId}": {
       "schema": "Production",

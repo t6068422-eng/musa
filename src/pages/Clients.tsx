@@ -75,7 +75,8 @@ export default function Clients() {
   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Client; direction: 'asc' | 'desc' } | null>(null);
   const [undoStack, setUndoStack] = useState<{ type: string; data: any }[]>([]);
-  const { user } = useAuth();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { user, quotaExceeded } = useAuth();
   const navigate = useNavigate();
   const tableRef = React.useRef<HTMLDivElement>(null);
 
@@ -88,6 +89,7 @@ export default function Clients() {
 
   const handleUndo = async () => {
     if (undoStack.length === 0) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     const lastAction = undoStack[0];
     const remainingStack = undoStack.slice(1);
 
@@ -135,6 +137,7 @@ export default function Clients() {
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     if (!formData.name || !formData.phone) {
       return toast.error('Name and Phone are required');
     }
@@ -182,6 +185,7 @@ export default function Clients() {
   const handleAdjustBalance = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adjustingClient) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
 
     try {
       const clientRef = doc(db, 'clients', adjustingClient.id);
@@ -208,13 +212,21 @@ export default function Clients() {
 
   const handleDeleteClient = async () => {
     if (!clientToDelete) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
+    setIsDeleting(true);
     try {
       await deleteDoc(doc(db, 'clients', clientToDelete.id));
       pushToUndo({ type: 'delete', data: clientToDelete });
       toast.success('Client deleted successfully');
       setClientToDelete(null);
-    } catch (error) {
-      toast.error('Failed to delete client');
+    } catch (error: any) {
+      if (error?.code === 'resource-exhausted') {
+        toast.error('Quota Limit: Cannot delete from cloud.');
+      } else {
+        toast.error('Failed to delete client');
+      }
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -526,8 +538,10 @@ export default function Clients() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setClientToDelete(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteClient}>Confirm Delete</Button>
+            <Button variant="outline" onClick={() => setClientToDelete(null)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteClient} disabled={isDeleting}>
+              {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

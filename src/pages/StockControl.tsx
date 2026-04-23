@@ -12,6 +12,7 @@ import {
   X,
   History,
   Eye,
+  Activity,
   FileBarChart,
   User as UserIcon,
   RefreshCw,
@@ -36,6 +37,7 @@ import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { Product, AppSettings, StockEntry } from '../types';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -80,13 +82,21 @@ export default function StockControl() {
   }[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const [lastCommittedEntries, setLastCommittedEntries] = useState<Record<string, StockEntry>>({});
   const [quickEntrySearch, setQuickEntrySearch] = useState('');
   const [quickEntryProductId, setQuickEntryProductId] = useState('');
   const [quickEntryProduction, setQuickEntryProduction] = useState('');
   const [quickEntryQtySold, setQuickEntryQtySold] = useState('');
-  const { user, isAdmin, profile } = useAuth();
+  const [showDetailedStock, setShowDetailedStock] = useState(true);
+  const [isCloudLoading, setIsCloudLoading] = useState(false);
+  const { user, isAdmin, profile, quotaExceeded, setQuotaExceeded } = useAuth();
   const isLocalChange = useRef(false);
+  const productsRef = useRef<Product[]>([]);
   const stockAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
 
   const downloadAsImage = () => {
     if (!stockAreaRef.current) return;
@@ -136,40 +146,6 @@ export default function StockControl() {
       handleFirestoreError(error, OperationType.LIST, 'products');
     });
 
-    // Subscriptions to the Collaborative Sheet (Live Draft)
-    const draftRef = doc(db, 'settings', 'stockControlDraft');
-    const unsubscribeDraft = onSnapshot(draftRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        
-        // Prevent infinite loop: Only update local state if the change came from another user
-        if (data.updatedBy === user.uid) return;
-
-        if (data.entries) {
-          const validEntries: Record<string, StockEntry> = {};
-          Object.keys(data.entries).forEach(key => {
-            if (data.entries[key]) {
-              const product = products.find(p => p.id === key);
-              validEntries[key] = {
-                ...data.entries[key],
-                preparedStock: data.entries[key].preparedStock ?? (product?.currentStock || 0),
-                production: data.entries[key].production ?? 0,
-                qtySold: data.entries[key].qtySold ?? 0,
-                price: data.entries[key].price ?? (product?.price || 0),
-                customFields: data.entries[key].customFields || {}
-              };
-            }
-          });
-          setEntries(validEntries);
-        }
-        if (data.customColumns) {
-          setCustomColumns(data.customColumns);
-        }
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'settings/stockControlDraft');
-    });
-
     // Fetch Recent History
     const historyQ = query(collection(db, 'stockControlHistory'), orderBy('date', 'desc'), limit(5));
     const unsubscribeHistory = onSnapshot(historyQ, (snapshot) => {
@@ -181,38 +157,166 @@ export default function StockControl() {
     return () => {
       unsubscribeSettings();
       unsubscribeProducts();
-      unsubscribeDraft();
       unsubscribeHistory();
     };
   }, [user]);
 
-  // Sync entries to Firestore whenever they change locally (debounced)
+  // Cross-tab local sync (Zero-cost, saves quota)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === `stockDraft_${user?.uid}` && e.newValue) {
+        try {
+          const cloudData = JSON.parse(e.newValue);
+          // Only update if we don't have local changes to avoid overwriting current work
+          if (!isLocalChange.current) {
+            setEntries(cloudData.entries);
+            if (cloudData.customColumns) setCustomColumns(cloudData.customColumns);
+          }
+        } catch (err) {
+          console.error('Failed to parse storage sync:', err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [user?.uid]);
+
+  // collaborative Draft (Live Sync)
+  useEffect(() => {
+    if (!user || products.length === 0) return;
+
+    const initializeData = async () => {
+      // 1. Try local storage first (fastest)
+      const saved = localStorage.getItem(`stockDraft_${user.uid}`);
+      if (saved) {
+        try {
+          const { entries: savedEntries, customColumns: savedCols } = JSON.parse(saved);
+          if (savedEntries && Object.keys(savedEntries).length > 0) {
+            setEntries(prev => {
+              const next = { ...prev };
+              Object.keys(savedEntries).forEach(id => {
+                if (!next[id]) {
+                  next[id] = savedEntries[id];
+                }
+              });
+              return next;
+            });
+            if (savedCols && customColumns.length === 0) setCustomColumns(savedCols);
+            // We don't return here anymore, because we might want to check cloud too
+          }
+        } catch (e) {
+          console.error('Failed to parse localStorage draft:', e);
+        }
+      }
+
+      // 2. Merge from Cloud Draft as well (to recover missing gaps)
+      try {
+        const draftRef = doc(db, 'settings', 'stockControlDraft');
+        const snap = await getDoc(draftRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.entries) {
+            setEntries(prev => {
+              const next = { ...prev };
+              Object.keys(data.entries).forEach(id => {
+                if (!next[id]) {
+                  next[id] = data.entries[id];
+                }
+              });
+              return next;
+            });
+            if (data.customColumns && customColumns.length === 0) setCustomColumns(data.customColumns);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to auto-load cloud draft:', err);
+      }
+    };
+
+    initializeData();
+  }, [user, products.length]);
+
+  // Sync entries to localStorage whenever they change locally (debounced)
   useEffect(() => {
     if (!user || products.length === 0) return;
     if (!isLocalChange.current) return;
 
-    const timeoutId = setTimeout(async () => {
-      const draftRef = doc(db, 'settings', 'stockControlDraft');
-      // Reset the flag immediately to prevent re-triggering if the save fails or takes time
-      const wasLocalChange = isLocalChange.current;
-      isLocalChange.current = false;
-
-      try {
-        await setDoc(draftRef, {
-          entries,
-          customColumns,
-          lastUpdated: Timestamp.now(),
-          updatedBy: user.uid
-        }, { merge: true });
-      } catch (error) {
-        console.error('Failed to sync stock control draft:', error);
-        // If it failed, we could optionally set it back to true, but to save quota/noise 
-        // it's better to stay false until the NEXT user interaction.
-      }
-    }, 2000); // 2-second debounce
-
-    return () => clearTimeout(timeoutId);
+    // Save to localStorage as a primary backup (zero cost + cross-tab sync)
+    try {
+      localStorage.setItem(`stockDraft_${user.uid}`, JSON.stringify({
+        entries,
+        customColumns,
+        timestamp: Date.now()
+      }));
+      
+      // Notify other tabs
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: `stockDraft_${user.uid}`,
+        newValue: localStorage.getItem(`stockDraft_${user.uid}`)
+      }));
+    } catch (e) {
+      console.error('Failed to save to localStorage:', e);
+    }
   }, [entries, customColumns, user, products.length]);
+
+  // Listen for storage events for cross-tab sync
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === `stockDraft_${user?.uid}` && e.newValue) {
+        // IMPORTANT: Only update from other tabs if WE don't have unsaved changes
+        // to prevent wiping current typing session.
+        if (isLocalChange.current) return;
+
+        try {
+          const localData = JSON.parse(e.newValue);
+          setEntries(localData.entries);
+          if (localData.customColumns) setCustomColumns(localData.customColumns);
+        } catch (err) {
+          console.error('Failed to parse storage sync:', err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [user?.uid]);
+
+  // Cloud Draft Sync (onSnapshot) is REMOVED to preserve quota.
+  // We only sync via the manualSyncDraft button which the user explicitly clicks.
+
+  const manualSyncDraft = async () => {
+    if (!user || products.length === 0) return;
+    if (quotaExceeded) {
+      toast.error('Quota Exceeded: Cloud features are limited for today. Data is safe in this browser.');
+      return;
+    }
+    
+    setLoading(true);
+    const draftRef = doc(db, 'settings', 'stockControlDraft');
+    try {
+      await setDoc(draftRef, {
+        entries,
+        customColumns,
+        lastUpdated: Timestamp.now(),
+        updatedBy: user.uid
+      }, { merge: true });
+
+      localStorage.setItem(`lastSyncedEntries_${user.uid}`, JSON.stringify(entries));
+      localStorage.setItem(`lastColumns_${user.uid}`, customColumns.join(','));
+
+      isLocalChange.current = false;
+      setQuotaExceeded(false);
+      toast.success('Sync Successful: Cloud draft updated');
+    } catch (error: any) {
+      if (error?.code === 'resource-exhausted') {
+        setQuotaExceeded(true);
+        toast.error('Quota Limit Reached: Cloud sync disabled until tomorrow.');
+      } else {
+        toast.error('Sync Failed: Check your connection');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const recordHistory = (description: string) => {
     setEditHistory(prev => {
@@ -260,21 +364,8 @@ export default function StockControl() {
     });
 
     setEntries(updated);
-    
-    // Explicitly update the cloud draft when clearing
-    const draftRef = doc(db, 'settings', 'stockControlDraft');
-    try {
-      await setDoc(draftRef, {
-        entries: updated,
-        lastUpdated: Timestamp.now(),
-        updatedBy: user?.uid
-      }, { merge: true });
-    } catch (error) {
-      console.error('Failed to clear stock control draft:', error);
-    }
-    
     setIsClearConfirmOpen(false);
-    toast.success('Fields cleared successfully (Cloud synced)');
+    toast.success('Fields cleared successfully (Syncing with cloud in background)');
   };
 
   const handleEntryChange = (productId: string, field: 'production' | 'qtySold' | 'preparedStock' | 'price', value: string) => {
@@ -315,18 +406,29 @@ export default function StockControl() {
     });
   };
 
-  const handleProductNameChange = async (productId: string, newName: string) => {
-    recordHistory(`Rename product to ${newName}`);
+  // Debounce product name change to save quota
+  const nameTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const handleProductNameChange = (productId: string, newName: string) => {
     // Update locally for immediate feedback
     setProducts(prev => prev.map(p => p.id === productId ? { ...p, name: newName } : p));
     
-    // Persist name change to Firestore
-    try {
-      const productRef = doc(db, 'products', productId);
-      await updateDoc(productRef, { name: newName });
-    } catch (error) {
-      console.error('Failed to update product name:', error);
-    }
+    if (nameTimeoutRef.current) clearTimeout(nameTimeoutRef.current);
+    
+    nameTimeoutRef.current = setTimeout(async () => {
+      if (quotaExceeded) {
+        console.warn('Quota exceeded: Skipping product name cloud sync.');
+        return;
+      }
+      try {
+        const productRef = doc(db, 'products', productId);
+        await updateDoc(productRef, { name: newName });
+      } catch (error: any) {
+        if (error?.code === 'resource-exhausted') {
+          setQuotaExceeded(true);
+        }
+        console.error('Failed to update product name:', error);
+      }
+    }, 5000); // 5-second debounce for renames (up from 2s) to save quota
   };
 
   const handleCustomFieldChange = (productId: string, columnName: string, value: string) => {
@@ -360,6 +462,7 @@ export default function StockControl() {
       return toast.error('Column already exists');
     }
 
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     isLocalChange.current = true;
     try {
       const settingsRef = doc(db, 'settings', 'stockControl');
@@ -376,6 +479,7 @@ export default function StockControl() {
   };
 
   const handleRemoveColumn = async (columnName: string) => {
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     isLocalChange.current = true;
     try {
       const settingsRef = doc(db, 'settings', 'stockControl');
@@ -390,6 +494,7 @@ export default function StockControl() {
 
   const handleQuickAdd = async () => {
     if (!quickAddName.trim()) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     try {
       const productsRef = collection(db, 'products');
       const newProductRef = doc(productsRef);
@@ -466,8 +571,39 @@ export default function StockControl() {
     setQuickEntryProductId('');
   };
 
+  const loadFromCloud = async () => {
+    if (!user) return;
+    setIsCloudLoading(true);
+    try {
+      const draftRef = doc(db, 'settings', 'stockControlDraft');
+      const snap = await getDoc(draftRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.entries) {
+          setEntries(data.entries);
+          if (data.customColumns) setCustomColumns(data.customColumns);
+          toast.success('Draft loaded from cloud');
+          isLocalChange.current = false;
+        } else {
+          toast.info('No cloud draft found');
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to load cloud draft');
+    } finally {
+      setIsCloudLoading(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!user) return;
+    
+    if (quotaExceeded) {
+      toast.error('Cloud Sync Disabled: Daily quota exceeded. Your data is safe in this browser.');
+      return;
+    }
+
     setLoading(true);
     
     try {
@@ -475,6 +611,7 @@ export default function StockControl() {
       const now = Timestamp.now();
       const dayId = format(new Date(), 'yyyy-MM-dd');
       const productIds = Object.keys(entries);
+      let haveMeaningfulCloudChanges = false;
       
       for (const productId of productIds) {
         const entry = entries[productId];
@@ -483,12 +620,14 @@ export default function StockControl() {
         const product = products.find(p => p.id === productId);
         if (!product) continue;
         
+        const lastCommitted = lastCommittedEntries[productId];
         const productRef = doc(db, 'products', productId);
         // Important: newStock is calculated based on current UI numbers
         const newStock = (entry.preparedStock || 0) - (entry.qtySold || 0);
 
         // 1. Log Production (Consolidated per day per product)
-        if (entry.production > 0) {
+        // Skip if quantity matches what we already saved to the cloud successfully for this session
+        if (entry.production > 0 && entry.production !== lastCommitted?.production) {
           const productionId = `${dayId}_${productId}`;
           const productionRef = doc(db, 'production', productionId);
           batch.set(productionRef, {
@@ -498,10 +637,11 @@ export default function StockControl() {
             date: now,
             addedBy: user.uid
           });
+          haveMeaningfulCloudChanges = true;
         }
 
         // 2. Log Sale (Consolidated per day per product)
-        if (entry.qtySold > 0) {
+        if (entry.qtySold > 0 && entry.qtySold !== lastCommitted?.qtySold) {
           const saleId = `${dayId}_${productId}`;
           const saleRef = doc(db, 'sales', saleId);
           const total = entry.qtySold * entry.price;
@@ -509,54 +649,88 @@ export default function StockControl() {
             productId,
             productName: product.name,
             quantity: entry.qtySold,
-            price: entry.price,
+            price: Number(entry.price) || 0,
             total: total,
             date: now,
             soldBy: user.uid
           });
+          haveMeaningfulCloudChanges = true;
         }
 
         // 3. Update Product Stock, Name, Price, and Custom Fields
-        batch.update(productRef, { 
-          name: product.name,
-          currentStock: newStock,
-          price: Number(entry.price) || 0,
-          customFields: entry.customFields || {}
-        });
+        const hasStockChange = newStock !== product.currentStock;
+        const hasPriceChange = (Number(entry.price) || 0) !== (product.price || 0);
+        const hasCustomFieldChange = JSON.stringify(entry.customFields || {}) !== JSON.stringify(product.customFields || {});
+
+        if (hasStockChange || hasPriceChange || hasCustomFieldChange) {
+          batch.update(productRef, { 
+            currentStock: newStock,
+            price: Number(entry.price) || 0,
+            customFields: entry.customFields || {}
+          });
+          haveMeaningfulCloudChanges = true;
+        }
       }
 
       // 4. Save History Record (One file per day)
-      const historyRef = doc(db, 'stockControlHistory', dayId);
-      const historyData = {
-        date: now,
-        savedBy: user.uid,
-        savedByName: profile?.name || 'User',
-        entries: Object.keys(entries).map(pId => {
-          const e = entries[pId];
-          const product = products.find(p => p.id === pId);
-          if (!e || !product) return null; // Only save existing products
-          return {
-            productId: e.productId,
-            production: e.production || 0,
-            qtySold: e.qtySold || 0,
-            price: e.price || 0,
-            preparedStock: e.preparedStock || 0,
-            customFields: e.customFields || {},
-            productName: product.name,
-            imageUrl: product.imageUrl || ''
-          };
-        }).filter(Boolean),
-        customColumns
-      };
-      batch.set(historyRef, historyData, { merge: true });
+      if (haveMeaningfulCloudChanges) {
+        const historyRef = doc(db, 'stockControlHistory', dayId);
+        const historyData = {
+          date: now,
+          savedBy: user.uid,
+          savedByName: profile?.name || 'User',
+          entries: Object.keys(entries).map(pId => {
+            const e = entries[pId];
+            const product = products.find(p => p.id === pId);
+            if (!e || !product) return null; // Only save existing products
+            return {
+              productId: e.productId,
+              production: e.production || 0,
+              qtySold: e.qtySold || 0,
+              price: e.price || 0,
+              preparedStock: e.preparedStock || 0,
+              customFields: e.customFields || {},
+              productName: product.name,
+              imageUrl: product.imageUrl || ''
+            };
+          }).filter(Boolean),
+          customColumns
+        };
+        batch.set(historyRef, historyData, { merge: true });
 
-      await batch.commit();
+        await batch.commit();
+        
+        // Also update the cloud draft so other tabs/devices see the new state
+        const draftRef = doc(db, 'settings', 'stockControlDraft');
+        await setDoc(draftRef, {
+          entries,
+          customColumns,
+          lastUpdated: Timestamp.now(),
+          updatedBy: user.uid
+        }, { merge: true });
 
-      toast.success('Stock control data saved successfully (Daily record updated)');
+        setLastCommittedEntries(JSON.parse(JSON.stringify(entries))); // Track what is now in cloud
+        
+        localStorage.setItem(`lastSyncedEntries_${user.uid}`, JSON.stringify(entries));
+        localStorage.setItem(`lastColumns_${user.uid}`, customColumns.join(','));
+
+        toast.success('Stock control data saved successfully');
+      } else {
+        toast.info('No new changes to save');
+      }
       
+      // Clear flags
+      isLocalChange.current = false;
+      setQuotaExceeded(false);
+
     } catch (error: any) {
       console.error(error);
-      toast.error('Failed to save stock control data');
+      if (error?.code === 'resource-exhausted') {
+        setQuotaExceeded(true);
+        toast.error('Quota Exceeded: Cannot save to cloud today.');
+      } else {
+        toast.error('Failed to save stock control data');
+      }
     } finally {
       setLoading(false);
     }
@@ -625,11 +799,44 @@ export default function StockControl() {
           />
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button 
+            variant="outline" 
+            className={cn("flex-1 md:flex-none gap-2 h-11 md:h-10", showDetailedStock ? "border-green-600 text-green-700" : "border-slate-300 text-slate-500")}
+            onClick={() => setShowDetailedStock(!showDetailedStock)}
+          >
+            {showDetailedStock ? <Eye className="w-4 h-4" /> : <Package className="w-4 h-4 opacity-50" />}
+            <span className="hidden sm:inline">{showDetailedStock ? 'Stock Column ON' : 'Stock Column OFF'}</span>
+            <span className="sm:hidden">{showDetailedStock ? 'Hide' : 'Show'} Stock</span>
+          </Button>
           <Button variant="outline" className="flex-1 md:flex-none gap-2 border-primary text-primary hover:bg-primary/5 h-11 md:h-10" onClick={downloadAsImage}>
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">Download Picture</span>
             <span className="sm:hidden">Pic</span>
           </Button>
+          <Button 
+            variant="outline" 
+            className="flex-1 md:flex-none gap-2 border-green-700 text-green-700 hover:bg-green-50 h-11 md:h-10 relative"
+            onClick={manualSyncDraft}
+            disabled={loading}
+          >
+            <Activity className={cn("w-4 h-4", isLocalChange.current && "animate-pulse text-blue-600")} />
+            <span className="hidden sm:inline">
+              {isLocalChange.current ? 'Cloud Sync Pending' : 'Cloud Draft Synced'}
+            </span>
+            <span className="sm:hidden">{isLocalChange.current ? 'Sync' : 'Saved'}</span>
+            {isLocalChange.current && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-500 rounded-full animate-ping" />}
+          </Button>
+
+          <Button 
+            variant="outline" 
+            className="flex-1 md:flex-none gap-2 border-slate-300 text-slate-700 hover:bg-slate-50 h-11 md:h-10"
+            onClick={loadFromCloud}
+            disabled={isCloudLoading}
+          >
+            <RefreshCw className={cn("w-4 h-4", isCloudLoading && "animate-spin")} />
+            <span className="hidden sm:inline">Load Cloud</span>
+          </Button>
+
           <Button 
             variant="outline" 
             className="flex-1 md:flex-none gap-2 border-orange-500 text-orange-600 hover:bg-orange-50 h-11 md:h-10"
@@ -739,13 +946,15 @@ export default function StockControl() {
               <TableHeader>
                 <TableRow className="bg-[#93c47d] hover:bg-[#93c47d] border-b-2 border-green-800">
                   <TableHead className="text-black font-bold text-center border-r border-green-800 min-w-[150px] sticky left-0 bg-[#93c47d] z-10">Product</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800">Prepared Stock</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800">Production</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800">Qty Sold</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800">Price</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800">Revenue</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800">New Stock</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800">Status</TableHead>
+                  {showDetailedStock && (
+                    <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">Stock</TableHead>
+                  )}
+                  <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">Prod.</TableHead>
+                  <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">Sold</TableHead>
+                  <TableHead className="text-black font-bold text-center border-r border-green-800 w-[100px]">Price</TableHead>
+                  <TableHead className="text-black font-bold text-center border-r border-green-800 w-[100px]">Rev.</TableHead>
+                  <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">New</TableHead>
+                  <TableHead className="text-black font-bold text-center border-r border-green-800 w-[100px]">Status</TableHead>
                   {customColumns.map(column => (
                     <TableHead key={column} className="text-black font-bold text-center border-r border-green-800 min-w-[120px] relative group">
                       {column}
@@ -762,7 +971,7 @@ export default function StockControl() {
               <TableBody>
                 {filteredProducts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8 + customColumns.length} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={7 + (showDetailedStock ? 1 : 0) + customColumns.length} className="text-center py-8 text-muted-foreground">
                       No products found.
                     </TableCell>
                   </TableRow>
@@ -791,15 +1000,17 @@ export default function StockControl() {
                             />
                           </div>
                         </TableCell>
-                        <TableCell className="text-center border-r border-green-800/30 p-1 bg-blue-50/30">
-                          <Input 
-                            type="text"
-                            inputMode="decimal"
-                            className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8 font-bold text-blue-700"
-                            value={entry.preparedStock}
-                            onChange={(e) => handleEntryChange(product.id, 'preparedStock', e.target.value)}
-                          />
-                        </TableCell>
+                        {showDetailedStock && (
+                          <TableCell className="text-center border-r border-green-800/30 p-1 bg-blue-50/30">
+                            <Input 
+                              type="text"
+                              inputMode="decimal"
+                              className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8 font-bold text-blue-700"
+                              value={entry.preparedStock}
+                              onChange={(e) => handleEntryChange(product.id, 'preparedStock', e.target.value)}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="text-center border-r border-green-800/30 p-1">
                           <Input 
                             type="text"
@@ -873,7 +1084,7 @@ export default function StockControl() {
                       </Button>
                     </div>
                   </TableCell>
-                  <TableCell colSpan={7 + customColumns.length} className="bg-accent/5" />
+                  <TableCell colSpan={(showDetailedStock ? 1 : 0) + 6 + customColumns.length} className="bg-accent/5" />
                 </TableRow>
               </TableBody>
             </Table>

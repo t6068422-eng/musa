@@ -10,10 +10,13 @@ import {
   X,
   User as UserIcon,
   Users,
+  Truck,
   Activity,
   History,
   FileText,
-  FileBarChart
+  FileBarChart,
+  AlertCircle,
+  WifiOff
 } from 'lucide-react';
 import { auth } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +31,7 @@ const navItems = [
   { name: 'Saved Data', path: '/saved-data', icon: History },
   { name: 'Products', path: '/products', icon: Package },
   { name: 'Clients', path: '/clients', icon: Users },
+  { name: 'Builties', path: '/builties', icon: Truck },
   { name: 'Production', path: '/production', icon: Factory },
   { name: 'Sales', path: '/sales', icon: ShoppingCart },
   { name: 'Prepared Stock', path: '/prepared-stock', icon: Activity },
@@ -40,7 +44,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, quotaExceeded, setQuotaExceeded, isOffline } = useAuth();
 
   return (
     <div className="min-h-screen bg-background text-foreground flex">
@@ -165,6 +169,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </AnimatePresence>
 
         <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
+          {isOffline && (
+            <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-4 flex items-center gap-3 shadow-sm rounded-r-lg no-print">
+              <WifiOff className="text-amber-500 h-5 w-5" />
+              <div>
+                <p className="text-sm font-bold text-amber-800">You are currently offline</p>
+                <p className="text-xs text-amber-700">Changes will be saved locally and synced once your connection returns.</p>
+              </div>
+            </div>
+          )}
+          {quotaExceeded && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 flex items-center justify-between shadow-sm rounded-r-lg animate-in fade-in slide-in-from-top-2 no-print">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="text-red-500 h-5 w-5" />
+                <div>
+                  <p className="text-sm font-bold text-red-800">Cloud Sync Warning: Daily Limit Reached</p>
+                  <p className="text-xs text-red-700">Firestore free tier limit reached. New changes are saved in this browser but won't sync to others until tomorrow.</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setQuotaExceeded(false)} className="text-red-500">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}

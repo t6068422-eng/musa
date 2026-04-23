@@ -17,6 +17,8 @@ import SavedData from './pages/SavedData';
 import MonthlyReport from './pages/MonthlyReport';
 import Clients from './pages/Clients';
 import ClientDetail from './pages/ClientDetail';
+import Builties from './pages/Builties';
+import BuiltyDetail from './pages/BuiltyDetail';
 
 function AppRoutes() {
   return (
@@ -35,6 +37,8 @@ function AppRoutes() {
               <Route path="/monthly-report" element={<MonthlyReport />} />
               <Route path="/clients" element={<Clients />} />
               <Route path="/clients/:clientId" element={<ClientDetail />} />
+              <Route path="/builties" element={<Builties />} />
+              <Route path="/builties/:builtyId" element={<BuiltyDetail />} />
               <Route path="/prepared-stock" element={<PreparedStock />} />
               <Route path="/available-stock" element={<AvailableStock />} />
               <Route path="/reports" element={<Reports />} />

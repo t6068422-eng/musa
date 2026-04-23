@@ -36,6 +36,31 @@ export interface Client {
   totalQuantity?: number;
 }
 
+export interface BuiltyItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  price: number;
+}
+
+export interface Builty {
+  id: string;
+  builtyNumber: string;
+  senderName: string;
+  receiverName: string;
+  destination: string;
+  transportName: string;
+  totalItems: number;
+  weight?: string;
+  unitPrice?: number;
+  freightAmount: number;
+  status: 'pending' | 'in-transit' | 'delivered' | 'cancelled';
+  date: Timestamp;
+  createdAt: Timestamp;
+  notes?: string;
+  items?: BuiltyItem[];
+}
+
 export interface AppSettings {
   customColumns: string[];
 }
