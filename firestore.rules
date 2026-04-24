@@ -33,7 +33,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isDev() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      return isSignedIn();
     }
 
     // ===============================================================

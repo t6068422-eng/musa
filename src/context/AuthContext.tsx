@@ -100,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const isAdmin = profile?.role === 'admin' || user?.email === 't6068422@gmail.com';
+  const isAdmin = !!user;
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, isAdmin, quotaExceeded, isOffline, setQuotaExceeded }}>

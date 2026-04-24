@@ -44,7 +44,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, quotaExceeded, setQuotaExceeded, isOffline } = useAuth();
+  const { profile, isAdmin, quotaExceeded, setQuotaExceeded, isOffline } = useAuth();
 
   return (
     <div className="min-h-screen bg-background text-foreground flex">
@@ -88,7 +88,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex flex-col overflow-hidden">
               <span className="text-sm font-medium truncate">{profile?.name || 'User'}</span>
-              <span className="text-xs text-muted-foreground truncate capitalize">{profile?.role || 'Staff'}</span>
+              <span className="text-xs text-muted-foreground truncate capitalize">{isAdmin ? 'Admin' : (profile?.role || 'Staff')}</span>
             </div>
           </div>
         </div>
@@ -159,7 +159,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     </div>
                     <div className="flex flex-col overflow-hidden">
                       <span className="text-sm font-medium truncate">{profile?.name || 'User'}</span>
-                      <span className="text-xs text-muted-foreground truncate capitalize">{profile?.role || 'Staff'}</span>
+                      <span className="text-xs text-muted-foreground truncate capitalize">{isAdmin ? 'Admin' : (profile?.role || 'Staff')}</span>
                     </div>
                   </div>
                 </div>
