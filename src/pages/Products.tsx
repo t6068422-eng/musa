@@ -137,7 +137,7 @@ export default function Products() {
       handleFirestoreError(error, OperationType.GET, 'settings/stockControl');
     });
 
-    const q = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const q = query(collection(db, 'products'), orderBy('name', 'asc'));
     const unsubscribeProducts = onSnapshot(q, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
     }, (error) => {
@@ -422,7 +422,7 @@ export default function Products() {
           </Table>
         </div>
       </div>
-    </div>
+      </div>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>

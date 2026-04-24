@@ -66,24 +66,35 @@ export default function Sales() {
   const { user, isAdmin, quotaExceeded } = useAuth();
   const salesRef = React.useRef<HTMLDivElement>(null);
 
-  const downloadAsImage = () => {
+  const downloadAsImage = async () => {
     if (!salesRef.current) return;
     
     toast.loading('Capturing sales status...');
-    toPng(salesRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
-      .then((dataUrl) => {
-        const link = document.createElement('a');
-        link.download = `Sales_${format(new Date(), 'yyyy-MM-dd')}.png`;
-        link.href = dataUrl;
-        link.click();
-        toast.dismiss();
-        toast.success('Sales status captured');
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.dismiss();
-        toast.error('Failed to capture image');
+    try {
+      const element = salesRef.current;
+      const dataUrl = await toPng(element, { 
+        backgroundColor: '#f8fafc', 
+        cacheBust: true,
+        pixelRatio: 2,
+        width: element.scrollWidth,
+        height: element.scrollHeight,
+        style: {
+          padding: '20px',
+          borderRadius: '12px'
+        }
       });
+      
+      const link = document.createElement('a');
+      link.download = `Sales_${format(new Date(), 'yyyy-MM-dd')}.png`;
+      link.href = dataUrl;
+      link.click();
+      toast.dismiss();
+      toast.success('Sales status captured');
+    } catch (err) {
+      console.error(err);
+      toast.dismiss();
+      toast.error('Failed to capture image');
+    }
   };
 
   const handlePrintInvoice = (sale: SaleEntry) => {

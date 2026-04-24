@@ -64,24 +64,35 @@ export default function Production() {
   const { user, isAdmin, quotaExceeded } = useAuth();
   const productionRef = React.useRef<HTMLDivElement>(null);
 
-  const downloadAsImage = () => {
+  const downloadAsImage = async () => {
     if (!productionRef.current) return;
     
     toast.loading('Capturing production status...');
-    toPng(productionRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
-      .then((dataUrl) => {
-        const link = document.createElement('a');
-        link.download = `Production_${format(new Date(), 'yyyy-MM-dd')}.png`;
-        link.href = dataUrl;
-        link.click();
-        toast.dismiss();
-        toast.success('Production status captured');
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.dismiss();
-        toast.error('Failed to capture image');
+    try {
+      const element = productionRef.current;
+      const dataUrl = await toPng(element, { 
+        backgroundColor: '#f8fafc', 
+        cacheBust: true,
+        pixelRatio: 2,
+        width: element.scrollWidth,
+        height: element.scrollHeight,
+        style: {
+          padding: '20px',
+          borderRadius: '12px'
+        }
       });
+      
+      const link = document.createElement('a');
+      link.download = `Production_${format(new Date(), 'yyyy-MM-dd')}.png`;
+      link.href = dataUrl;
+      link.click();
+      toast.dismiss();
+      toast.success('Production status captured');
+    } catch (err) {
+      console.error(err);
+      toast.dismiss();
+      toast.error('Failed to capture image');
+    }
   };
 
   // Form State

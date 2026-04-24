@@ -24,6 +24,7 @@ import {
   doc, 
   onSnapshot, 
   Timestamp,
+  addDoc,
   query,
   orderBy,
   writeBatch,
@@ -152,12 +153,14 @@ export default function StockControl() {
     });
 
     // Fetch Products
-    const q = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const q = query(collection(db, 'products'), orderBy('name', 'asc'));
     const unsubscribeProducts = onSnapshot(q, (snapshot) => {
       const productsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
       setProducts(productsData);
+      setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');
+      setLoading(false);
     });
 
     // Fetch Recent History
@@ -1001,8 +1004,41 @@ export default function StockControl() {
               <TableBody>
                 {filteredProducts.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7 + (showDetailedStock ? 1 : 0) + customColumns.length} className="text-center py-8 text-muted-foreground">
-                      No products found.
+                    <TableCell colSpan={7 + (showDetailedStock ? 1 : 0) + customColumns.length} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center gap-4">
+                        <div className="bg-muted p-4 rounded-full">
+                          <Package className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-lg font-semibold">No products found</p>
+                          <p className="text-sm text-muted-foreground">Start by adding a product below or using Sample Data.</p>
+                        </div>
+                        {isAdmin && (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="mt-2"
+                            onClick={async () => {
+                              const toastId = toast.loading('Seeding sample products...');
+                              try {
+                                const sampleProducts = [
+                                  { name: 'Red Brick Standard', currentStock: 25000, minStockLevel: 5000, unit: 'pcs', category: 'Bricks', price: 12, createdAt: Timestamp.now() },
+                                  { name: 'Red Brick Premium', currentStock: 15000, minStockLevel: 3000, unit: 'pcs', category: 'Bricks', price: 15, createdAt: Timestamp.now() },
+                                  { name: 'Cement Bag', currentStock: 800, minStockLevel: 100, unit: 'bags', category: 'Construction', price: 1250, createdAt: Timestamp.now() }
+                                ];
+                                for (const p of sampleProducts) {
+                                  await addDoc(collection(db, 'products'), p);
+                                }
+                                toast.success('Sample products added', { id: toastId });
+                              } catch (e: any) {
+                                toast.error('Seeding failed: ' + e.message, { id: toastId });
+                              }
+                            }}
+                          >
+                            Add Sample Products
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : (
