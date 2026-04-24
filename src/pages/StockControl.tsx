@@ -1022,9 +1022,9 @@ export default function StockControl() {
                               const toastId = toast.loading('Seeding sample products...');
                               try {
                                 const sampleProducts = [
-                                  { name: 'Red Brick Standard', currentStock: 25000, minStockLevel: 5000, unit: 'pcs', category: 'Bricks', price: 12, createdAt: Timestamp.now() },
-                                  { name: 'Red Brick Premium', currentStock: 15000, minStockLevel: 3000, unit: 'pcs', category: 'Bricks', price: 15, createdAt: Timestamp.now() },
-                                  { name: 'Cement Bag', currentStock: 800, minStockLevel: 100, unit: 'bags', category: 'Construction', price: 1250, createdAt: Timestamp.now() }
+                                  { name: 'Red Brick Standard', currentStock: 25000, minStockLevel: 5000, unit: 'pcs', category: 'Bricks', price: 12, availableStock: 25000, createdAt: Timestamp.now() },
+                                  { name: 'Red Brick Premium', currentStock: 15000, minStockLevel: 3000, unit: 'pcs', category: 'Bricks', price: 15, availableStock: 15000, createdAt: Timestamp.now() },
+                                  { name: 'Cement Bag', currentStock: 800, minStockLevel: 100, unit: 'bags', category: 'Construction', price: 1250, availableStock: 800, createdAt: Timestamp.now() }
                                 ];
                                 for (const p of sampleProducts) {
                                   await addDoc(collection(db, 'products'), p);

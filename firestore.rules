@@ -41,9 +41,9 @@ service cloud.firestore {
     // ===============================================================
     function isValidProduct(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
-             data.currentStock is number &&
-             data.unit is string &&
-             data.category is string;
+             (!('currentStock' in data) || data.currentStock is number) &&
+             (!('unit' in data) || data.unit is string) &&
+             (!('category' in data) || data.category is string);
     }
 
     function isValidBuiltyItem(item) {
