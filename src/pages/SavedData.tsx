@@ -70,7 +70,7 @@ export default function SavedData() {
   const [history, setHistory] = useState<StockHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRecord, setSelectedRecord] = useState<StockHistory | null>(null);
-  const { user, isAdmin, quotaExceeded } = useAuth();
+  const { user, quotaExceeded } = useAuth();
   const summaryRef = React.useRef<HTMLDivElement>(null);
   const detailRef = React.useRef<HTMLDivElement>(null);
 
@@ -126,11 +126,6 @@ export default function SavedData() {
   }, [user]);
 
   const handleDelete = async (id: string, savedBy: string) => {
-    if (!isAdmin && user?.uid !== savedBy) {
-      toast.error('You can only delete your own records');
-      return;
-    }
-
     if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     if (!confirm('Are you sure you want to delete this record?')) return;
 
@@ -316,16 +311,14 @@ export default function SavedData() {
                       CSV
                     </Button>
                     
-                    {(isAdmin || user?.uid === record.savedBy) && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
-                        onClick={() => handleDelete(record.id, record.savedBy)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20"
+                      onClick={() => handleDelete(record.id, record.savedBy)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

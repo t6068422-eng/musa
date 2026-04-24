@@ -9,7 +9,6 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  isAdmin: boolean;
   quotaExceeded: boolean;
   isOffline: boolean;
   setQuotaExceeded: (val: boolean) => void;
@@ -19,7 +18,6 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
-  isAdmin: false,
   quotaExceeded: false,
   isOffline: false,
   setQuotaExceeded: () => {},
@@ -27,7 +25,6 @@ const AuthContext = createContext<AuthContextType>({
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -35,39 +32,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-      if (!firebaseUser) {
-        setProfile(null);
-        setLoading(false);
-      }
+      setLoading(false);
     });
 
     return () => unsubscribeAuth();
   }, []);
-
-  useEffect(() => {
-    if (!user) return;
-
-    // Fetch user profile from Firestore
-    const unsubscribeProfile = onSnapshot(doc(db, 'users', user.uid), (snapshot) => {
-      if (snapshot.exists()) {
-        setProfile({ uid: snapshot.id, ...snapshot.data() } as UserProfile);
-      } else {
-        // Fallback for new users or if profile doc is missing
-        setProfile({
-          uid: user.uid,
-          email: user.email || '',
-          name: user.displayName || user.email?.split('@')[0] || 'User',
-          role: 'staff' // Default role
-        });
-      }
-      setLoading(false);
-    }, (error) => {
-      console.warn('Profile fetch error:', error.message);
-      setLoading(false);
-    });
-
-    return () => unsubscribeProfile();
-  }, [user]);
 
   useEffect(() => {
     const handler = () => {
@@ -100,10 +69,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const isAdmin = !!user;
-
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, quotaExceeded, isOffline, setQuotaExceeded }}>
+    <AuthContext.Provider value={{ user, profile: null, loading, quotaExceeded, isOffline, setQuotaExceeded }}>
       {children}
     </AuthContext.Provider>
   );

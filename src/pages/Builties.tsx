@@ -100,7 +100,7 @@ export default function Builties() {
   const [bulkStatus, setBulkStatus] = useState<Builty['status']>('pending');
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<any[]>([]); // Added products state
-  const { user, isAdmin, quotaExceeded, setQuotaExceeded } = useAuth();
+  const { user, quotaExceeded, setQuotaExceeded } = useAuth();
   const navigate = useNavigate();
   const tableRef = React.useRef<HTMLDivElement>(null);
 
@@ -302,7 +302,7 @@ export default function Builties() {
 
   const handleBulkDelete = async () => {
     if (selectedBuilties.size === 0) return;
-    console.log('Bulk delete check - isAdmin:', isAdmin, 'Quota:', quotaExceeded);
+    console.log('Bulk delete check - Quota:', quotaExceeded);
     if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     
     setIsBulkDeleteDialogOpen(true);
@@ -1012,11 +1012,9 @@ export default function Builties() {
                             <DropdownMenuItem onClick={() => navigate(`/builties/${builty.id}`)} className="gap-2">
                               <FileText className="w-4 h-4" /> View Full View
                             </DropdownMenuItem>
-                            {isAdmin && (
-                              <DropdownMenuItem className="text-destructive gap-2 focus:bg-destructive focus:text-destructive-foreground" onClick={() => setBuiltyToDelete(builty)}>
-                                <Trash2 className="w-4 h-4" /> Delete Record
-                              </DropdownMenuItem>
-                            )}
+                            <DropdownMenuItem className="text-destructive gap-2 focus:bg-destructive focus:text-destructive-foreground" onClick={() => setBuiltyToDelete(builty)}>
+                              <Trash2 className="w-4 h-4" /> Delete Record
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -1069,18 +1067,16 @@ export default function Builties() {
                 Change Status
               </Button>
               
-              {isAdmin && (
-                <Button 
-                  variant="destructive" 
-                  size="sm" 
-                  onClick={handleBulkDelete}
-                  disabled={isDeleting}
-                  className="gap-2 rounded-full"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Delete Selected
-                </Button>
-              )}
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                onClick={handleBulkDelete}
+                disabled={isDeleting}
+                className="gap-2 rounded-full"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete Selected
+              </Button>
               
               <Button 
                 variant="ghost" 

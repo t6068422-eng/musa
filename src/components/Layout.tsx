@@ -8,6 +8,7 @@ import {
   BarChart3, 
   Menu, 
   X,
+  LogOut,
   User as UserIcon,
   Users,
   Truck,
@@ -44,7 +45,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, isAdmin, quotaExceeded, setQuotaExceeded, isOffline } = useAuth();
+  const { quotaExceeded, setQuotaExceeded, isOffline } = useAuth();
 
   return (
     <div className="min-h-screen bg-background text-foreground flex">
@@ -82,15 +83,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 px-4 py-3">
-            <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center">
-              <UserIcon className="w-6 h-6 text-muted-foreground" />
-            </div>
-            <div className="flex flex-col overflow-hidden">
-              <span className="text-sm font-medium truncate">{profile?.name || 'User'}</span>
-              <span className="text-xs text-muted-foreground truncate capitalize">{isAdmin ? 'Admin' : (profile?.role || 'Staff')}</span>
-            </div>
-          </div>
+          <Button 
+            variant="ghost" 
+            className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={() => auth.signOut()}
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
+          </Button>
         </div>
       </aside>
 
@@ -153,15 +153,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   })}
                 </nav>
                 <div className="p-4 border-t border-border">
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center">
-                      <UserIcon className="w-6 h-6 text-muted-foreground" />
-                    </div>
-                    <div className="flex flex-col overflow-hidden">
-                      <span className="text-sm font-medium truncate">{profile?.name || 'User'}</span>
-                      <span className="text-xs text-muted-foreground truncate capitalize">{isAdmin ? 'Admin' : (profile?.role || 'Staff')}</span>
-                    </div>
-                  </div>
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => auth.signOut()}
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Logout</span>
+                  </Button>
                 </div>
               </motion.aside>
             </>

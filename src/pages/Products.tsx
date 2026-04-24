@@ -58,7 +58,7 @@ export default function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const { user, isAdmin, quotaExceeded } = useAuth();
+  const { user, quotaExceeded } = useAuth();
   const tableRef = React.useRef<HTMLDivElement>(null);
 
   const downloadAsImage = async () => {
@@ -151,7 +151,6 @@ export default function Products() {
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return toast.error('Only admins can add products');
     if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
 
     try {
@@ -192,7 +191,6 @@ export default function Products() {
 
   const handleDeleteProduct = async () => {
     if (!productToDelete) return;
-    if (!isAdmin) return toast.error('Only admins can delete products');
     if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
 
     setIsDeleting(true);
@@ -228,10 +226,9 @@ export default function Products() {
           <Button onClick={downloadAsImage} variant="outline" className="gap-2">
             <ImageIcon className="w-4 h-4" /> Download Picture
           </Button>
-          {isAdmin && (
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger render={<Button className="gap-2" />}>
-              <Plus className="w-4 h-4" /> Add Product
+                <Plus className="w-4 h-4" /> Add Product
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
@@ -306,10 +303,8 @@ export default function Products() {
               </form>
             </DialogContent>
           </Dialog>
-        )}
+        </div>
       </div>
-    </div>
-
       <div className="flex items-center gap-4 bg-card/50 p-4 rounded-lg border border-border/50 backdrop-blur-sm">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -402,16 +397,14 @@ export default function Products() {
                           >
                             <Edit2 className="w-4 h-4" />
                           </Button>
-                          {isAdmin && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="text-destructive hover:bg-destructive/10 h-10 w-10"
-                              onClick={() => setProductToDelete(product.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-destructive hover:bg-destructive/10 h-10 w-10"
+                            onClick={() => setProductToDelete(product.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

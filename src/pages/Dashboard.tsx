@@ -50,7 +50,7 @@ export default function Dashboard() {
   const [recentSales, setRecentSales] = useState<any[]>([]);
   const [monthlyStats, setMonthlyStats] = useState<any>(null);
   const [clients, setClients] = useState<Client[]>([]);
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const [isSeeding, setIsSeeding] = useState(false);
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'loading'>('loading');
   const dashboardRef = React.useRef<HTMLDivElement>(null);
@@ -215,7 +215,6 @@ export default function Dashboard() {
   }, [user]);
 
   const seedSampleData = async () => {
-    if (!isAdmin) return;
     setIsSeeding(true);
     const toastId = toast.loading('Seeding sample products...');
     try {
@@ -294,7 +293,7 @@ export default function Dashboard() {
           <p className="text-muted-foreground">Welcome back to MUSA TRADERS management console.</p>
         </div>
         <div className="flex items-center gap-2">
-          {isAdmin && products.length === 0 && (
+          {products.length === 0 && (
             <Button 
               variant="outline" 
               className="gap-2 text-primary border-primary/20 hover:bg-primary/5" 

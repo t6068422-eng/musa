@@ -63,7 +63,7 @@ export default function Sales() {
   const [clients, setClients] = useState<Client[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedSale, setSelectedSale] = useState<SaleEntry | null>(null);
-  const { user, isAdmin, quotaExceeded } = useAuth();
+  const { user, quotaExceeded } = useAuth();
   const salesRef = React.useRef<HTMLDivElement>(null);
 
   const downloadAsImage = async () => {
@@ -477,17 +477,15 @@ export default function Sales() {
                             >
                               <Printer className="w-4 h-4" />
                             </Button>
-                            {isAdmin && (
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="text-destructive hover:bg-destructive/10 h-10 w-10"
-                                onClick={() => setLogToDelete(log)}
-                                title="Delete Sale"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            )}
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-destructive hover:bg-destructive/10 h-10 w-10"
+                              onClick={() => setLogToDelete(log)}
+                              title="Delete Sale"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>

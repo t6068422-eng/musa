@@ -90,7 +90,7 @@ export default function StockControl() {
   const [quickEntryQtySold, setQuickEntryQtySold] = useState('');
   const [showDetailedStock, setShowDetailedStock] = useState(true);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
-  const { user, isAdmin, profile, quotaExceeded, setQuotaExceeded } = useAuth();
+  const { user, quotaExceeded, setQuotaExceeded } = useAuth();
   const isLocalChange = useRef(false);
   const productsRef = useRef<Product[]>([]);
   const stockAreaRef = useRef<HTMLDivElement>(null);
@@ -711,7 +711,7 @@ export default function StockControl() {
         const historyData = {
           date: now,
           savedBy: user.uid,
-          savedByName: profile?.name || 'User',
+          savedByName: user?.displayName || user?.email?.split('@')[0] || 'User',
           entries: Object.keys(entries).map(pId => {
             const e = entries[pId];
             const product = products.find(p => p.id === pId);
@@ -880,28 +880,24 @@ export default function StockControl() {
             <span className="hidden sm:inline">Undo / History</span>
             <span className="sm:hidden">Undo</span> ({editHistory.length})
           </Button>
-          {(isAdmin || user?.email === 't6068422@gmail.com') && (
-            <>
-              <Button 
-                variant="outline" 
-                className="flex-1 md:flex-none gap-2 border-red-200 text-red-600 hover:bg-red-50 h-11 md:h-10"
-                onClick={() => setIsClearConfirmOpen(true)}
-              >
-                <X className="w-4 h-4" />
-                <span className="hidden sm:inline">Clear Inputs</span>
-                <span className="sm:hidden">Clear</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                className="flex-1 md:flex-none gap-2 border-green-800 text-green-800 hover:bg-green-50 h-11 md:h-10"
-                onClick={() => setIsAddColumnOpen(true)}
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">Create Column</span>
-                <span className="sm:hidden">Column</span>
-              </Button>
-            </>
-          )}
+          <Button 
+            variant="outline" 
+            className="flex-1 md:flex-none gap-2 border-red-200 text-red-600 hover:bg-red-50 h-11 md:h-10"
+            onClick={() => setIsClearConfirmOpen(true)}
+          >
+            <X className="w-4 h-4" />
+            <span className="hidden sm:inline">Clear Inputs</span>
+            <span className="sm:hidden">Clear</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            className="flex-1 md:flex-none gap-2 border-green-800 text-green-800 hover:bg-green-50 h-11 md:h-10"
+            onClick={() => setIsAddColumnOpen(true)}
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span className="hidden sm:inline">Create Column</span>
+            <span className="sm:hidden">Column</span>
+          </Button>
         </div>
       </div>
 
@@ -1013,31 +1009,29 @@ export default function StockControl() {
                           <p className="text-lg font-semibold">No products found</p>
                           <p className="text-sm text-muted-foreground">Start by adding a product below or using Sample Data.</p>
                         </div>
-                        {isAdmin && (
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="mt-2"
-                            onClick={async () => {
-                              const toastId = toast.loading('Seeding sample products...');
-                              try {
-                                const sampleProducts = [
-                                  { name: 'Red Brick Standard', currentStock: 25000, minStockLevel: 5000, unit: 'pcs', category: 'Bricks', price: 12, availableStock: 25000, createdAt: Timestamp.now() },
-                                  { name: 'Red Brick Premium', currentStock: 15000, minStockLevel: 3000, unit: 'pcs', category: 'Bricks', price: 15, availableStock: 15000, createdAt: Timestamp.now() },
-                                  { name: 'Cement Bag', currentStock: 800, minStockLevel: 100, unit: 'bags', category: 'Construction', price: 1250, availableStock: 800, createdAt: Timestamp.now() }
-                                ];
-                                for (const p of sampleProducts) {
-                                  await addDoc(collection(db, 'products'), p);
-                                }
-                                toast.success('Sample products added', { id: toastId });
-                              } catch (e: any) {
-                                toast.error('Seeding failed: ' + e.message, { id: toastId });
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="mt-2"
+                          onClick={async () => {
+                            const toastId = toast.loading('Seeding sample products...');
+                            try {
+                              const sampleProducts = [
+                                { name: 'Red Brick Standard', currentStock: 25000, minStockLevel: 5000, unit: 'pcs', category: 'Bricks', price: 12, availableStock: 25000, createdAt: Timestamp.now() },
+                                { name: 'Red Brick Premium', currentStock: 15000, minStockLevel: 3000, unit: 'pcs', category: 'Bricks', price: 15, availableStock: 15000, createdAt: Timestamp.now() },
+                                { name: 'Cement Bag', currentStock: 800, minStockLevel: 100, unit: 'bags', category: 'Construction', price: 1250, availableStock: 800, createdAt: Timestamp.now() }
+                              ];
+                              for (const p of sampleProducts) {
+                                await addDoc(collection(db, 'products'), p);
                               }
-                            }}
-                          >
-                            Add Sample Products
-                          </Button>
-                        )}
+                              toast.success('Sample products added', { id: toastId });
+                            } catch (e: any) {
+                              toast.error('Seeding failed: ' + e.message, { id: toastId });
+                            }
+                          }}
+                        >
+                          Add Sample Products
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

@@ -74,7 +74,7 @@ import {
 export default function BuiltyDetail() {
   const { builtyId } = useParams<{ builtyId: string }>();
   const navigate = useNavigate();
-  const { user, isAdmin, quotaExceeded } = useAuth();
+  const { user, quotaExceeded } = useAuth();
   const pageRef = React.useRef<HTMLDivElement>(null);
   
   const [builty, setBuilty] = useState<Builty | null>(null);
@@ -228,15 +228,13 @@ export default function BuiltyDetail() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {isAdmin && (
-            <Button 
-              variant="outline" 
-              className="gap-2 text-destructive border-destructive hover:bg-destructive/10"
-              onClick={() => setShowDeleteConfirm(true)}
-            >
-              <Trash2 className="w-4 h-4" /> Delete Record
-            </Button>
-          )}
+          <Button 
+            variant="outline" 
+            className="gap-2 text-destructive border-destructive hover:bg-destructive/10"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Trash2 className="w-4 h-4" /> Delete Record
+          </Button>
           <Button onClick={handlePrint} variant="outline" className="gap-2">
             <Printer className="w-4 h-4" /> Print
           </Button>
@@ -345,16 +343,14 @@ export default function BuiltyDetail() {
                    Itemized Consignment
                 </CardTitle>
                 <div className="flex items-center gap-2 print:hidden">
-                  {isAdmin && (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-8 gap-1 border-primary/20 hover:bg-primary/5 text-primary"
-                      onClick={() => setIsEditingItems(true)}
-                    >
-                      <Edit2 className="w-3 h-3" /> Manage Items
-                    </Button>
-                  )}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-8 gap-1 border-primary/20 hover:bg-primary/5 text-primary"
+                    onClick={() => setIsEditingItems(true)}
+                  >
+                    <Edit2 className="w-3 h-3" /> Manage Items
+                  </Button>
                   <div className="relative w-40">
                     <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                     <Input

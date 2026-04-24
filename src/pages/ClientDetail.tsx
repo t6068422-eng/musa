@@ -100,7 +100,6 @@ export default function ClientDetail() {
   const [saleToDelete, setSaleToDelete] = useState<SaleEntry | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [undoStack, setUndoStack] = useState<any[]>([]);
-  const { isAdmin } = useAuth();
 
   const downloadAsImage = () => {
     if (!pageRef.current) return;
@@ -785,13 +784,13 @@ export default function ClientDetail() {
                               <TableHead className="bg-background font-bold text-foreground py-4">Qty</TableHead>
                               <TableHead className="bg-background font-bold text-foreground py-4">Unit Price</TableHead>
                               <TableHead className="text-right bg-background font-bold text-foreground py-4 pr-6">Total Price</TableHead>
-                              {isAdmin && <TableHead className="text-right bg-background font-bold text-foreground py-4 pr-6">Actions</TableHead>}
+                              <TableHead className="text-right bg-background font-bold text-foreground py-4 pr-6">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {filteredHistory.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-12 text-muted-foreground italic">
+                                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">
                                   {loading ? 'Loading records...' : 'No purchase records found.'}
                                 </TableCell>
                               </TableRow>
@@ -809,28 +808,26 @@ export default function ClientDetail() {
                                   <TableCell className="text-right font-bold pr-6">
                                     Rs. {history.total.toLocaleString()}
                                   </TableCell>
-                                  {isAdmin && (
-                                    <TableCell className="text-right pr-6">
-                                      <div className="flex justify-end gap-1">
-                                        <Button 
-                                          variant="ghost" 
-                                          size="icon" 
-                                          className="h-8 w-8 text-primary hover:bg-primary/10"
-                                          onClick={() => handleEditSale(history)}
-                                        >
-                                          <Edit2 className="w-3.5 h-3.5" />
-                                        </Button>
-                                        <Button 
-                                          variant="ghost" 
-                                          size="icon" 
-                                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                          onClick={() => setSaleToDelete(history)}
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </Button>
-                                      </div>
-                                    </TableCell>
-                                  )}
+                                  <TableCell className="text-right pr-6">
+                                    <div className="flex justify-end gap-1">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-primary hover:bg-primary/10"
+                                        onClick={() => handleEditSale(history)}
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                        onClick={() => setSaleToDelete(history)}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
                                 </TableRow>
                               ))
                             )}

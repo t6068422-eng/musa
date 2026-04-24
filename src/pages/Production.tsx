@@ -61,7 +61,7 @@ export default function Production() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productionLogs, setProductionLogs] = useState<ProductionEntry[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const { user, isAdmin, quotaExceeded } = useAuth();
+  const { user, quotaExceeded } = useAuth();
   const productionRef = React.useRef<HTMLDivElement>(null);
 
   const downloadAsImage = async () => {
@@ -359,16 +359,14 @@ export default function Production() {
                         <TableCell className="font-medium">{log.productName}</TableCell>
                         <TableCell>{log.quantity}</TableCell>
                         <TableCell className="text-right">
-                          {isAdmin && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="text-destructive hover:bg-destructive/10 h-10 w-10"
-                              onClick={() => setLogToDelete(log)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-destructive hover:bg-destructive/10 h-10 w-10"
+                            onClick={() => setLogToDelete(log)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))

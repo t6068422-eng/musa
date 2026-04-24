@@ -32,10 +32,6 @@ service cloud.firestore {
       return resource.data;
     }
 
-    function isAdmin() {
-      return isSignedIn();
-    }
-
     // ===============================================================
     // Shared Validation Blueprints
     // ===============================================================
@@ -75,24 +71,24 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidProduct(incoming()) && isValidId(productId);
       allow update: if isSignedIn() && isValidProduct(incoming());
-      allow delete: if isAdmin();
+      allow delete: if isSignedIn();
     }
 
     match /production/{productionId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidId(productionId);
-      allow delete: if isAdmin();
+      allow delete: if isSignedIn();
     }
 
     match /sales/{saleId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidId(saleId);
-      allow delete: if isAdmin();
+      allow delete: if isSignedIn();
     }
 
     match /settings/{settingId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     match /clients/{clientId} {
@@ -103,8 +99,8 @@ service cloud.firestore {
     match /builties/{builtyId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidBuilty(incoming()) && isValidId(builtyId);
-      allow update: if isSignedIn() && (isValidBuilty(incoming()) || isAdmin());
-      allow delete: if isAdmin();
+      allow update: if isSignedIn() && isValidBuilty(incoming());
+      allow delete: if isSignedIn();
     }
 
     match /stockControlHistory/{historyId} {
@@ -114,11 +110,11 @@ service cloud.firestore {
 
     match /monthlyReports/{reportId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
       
       match /productStats/{productId} {
         allow read: if isSignedIn();
-        allow write: if isAdmin();
+        allow write: if isSignedIn();
       }
     }
     
