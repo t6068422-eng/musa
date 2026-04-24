@@ -61,24 +61,34 @@ export default function Products() {
   const { user, isAdmin, quotaExceeded } = useAuth();
   const tableRef = React.useRef<HTMLDivElement>(null);
 
-  const downloadAsImage = () => {
+  const downloadAsImage = async () => {
     if (!tableRef.current) return;
     
     toast.loading('Capturing product list...');
-    toPng(tableRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
-      .then((dataUrl) => {
-        const link = document.createElement('a');
-        link.download = `ProductList_${format(new Date(), 'yyyy-MM-dd')}.png`;
-        link.href = dataUrl;
-        link.click();
-        toast.dismiss();
-        toast.success('Product list captured');
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.dismiss();
-        toast.error('Failed to capture image');
+    try {
+      const element = tableRef.current;
+      const dataUrl = await toPng(element, { 
+        backgroundColor: '#f8fafc', 
+        cacheBust: true,
+        pixelRatio: 2,
+        width: element.scrollWidth,
+        height: element.scrollHeight,
+        style: {
+          padding: '20px',
+          borderRadius: '0px'
+        }
       });
+      const link = document.createElement('a');
+      link.download = `ProductList_${format(new Date(), 'yyyy-MM-dd')}.png`;
+      link.href = dataUrl;
+      link.click();
+      toast.dismiss();
+      toast.success('Product list captured');
+    } catch (err) {
+      console.error(err);
+      toast.dismiss();
+      toast.error('Failed to capture image');
+    }
   };
 
   // Form State
@@ -278,6 +288,7 @@ export default function Products() {
                           <Input 
                             type="file" 
                             accept="image/*" 
+                            capture="environment"
                             className="absolute inset-0 opacity-0 cursor-pointer"
                             onChange={handleImageUpload}
                           />

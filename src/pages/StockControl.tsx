@@ -98,30 +98,44 @@ export default function StockControl() {
     productsRef.current = products;
   }, [products]);
 
-  const downloadAsImage = () => {
+  const downloadAsImage = async () => {
     if (!stockAreaRef.current) return;
     
     toast.loading('Capturing stock sheet...');
-    toPng(stockAreaRef.current, { 
-      backgroundColor: '#ffffff',
-      cacheBust: true,
-      style: {
-        borderRadius: '0px'
-      }
-    })
-      .then((dataUrl) => {
-        const link = document.createElement('a');
-        link.download = `StockControl_${format(new Date(), 'yyyy-MM-dd')}.png`;
-        link.href = dataUrl;
-        link.click();
-        toast.dismiss();
-        toast.success('Stock control captured successfully');
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.dismiss();
-        toast.error('Failed to capture image');
+    try {
+      // Temporarily ensure full visibility for capture
+      const element = stockAreaRef.current;
+      const originalStyle = element.style.cssText;
+      
+      const dataUrl = await toPng(element, { 
+        backgroundColor: '#ffffff',
+        cacheBust: true,
+        pixelRatio: 2,
+        width: element.scrollWidth,
+        height: element.scrollHeight,
+        style: {
+          borderRadius: '0px',
+          margin: '0',
+          padding: '20px'
+        },
+        filter: (node) => {
+          // Skip elements that shouldn't be in the picture
+          const exclusionClasses = ['no-capture', 'hidden-in-capture'];
+          return !exclusionClasses.some(cls => (node as HTMLElement)?.classList?.contains(cls));
+        }
       });
+      
+      const link = document.createElement('a');
+      link.download = `StockControl_${format(new Date(), 'yyyy-MM-dd')}.png`;
+      link.href = dataUrl;
+      link.click();
+      toast.dismiss();
+      toast.success('Stock control captured successfully');
+    } catch (err) {
+      console.error(err);
+      toast.dismiss();
+      toast.error('Failed to capture image');
+    }
   };
 
   useEffect(() => {

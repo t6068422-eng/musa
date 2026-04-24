@@ -13,6 +13,7 @@ import {
 import { collection, query, where, onSnapshot, Timestamp, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
+import { safeToDate } from '@/lib/utils';
 import { ProductionEntry, SaleEntry, Product } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -66,7 +67,14 @@ export default function Reports() {
     if (!reportRef.current) return;
     
     toast.loading('Exporting report as image...');
-    toPng(reportRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+    const element = reportRef.current;
+    toPng(element, { 
+      backgroundColor: '#f8fafc', 
+      cacheBust: true,
+      pixelRatio: 2,
+      width: element.scrollWidth,
+      height: element.scrollHeight
+    })
       .then((dataUrl) => {
         const link = document.createElement('a');
         link.download = `Report_${period}_${format(new Date(), 'yyyy-MM-dd')}.png`;

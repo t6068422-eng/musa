@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
+import { safeToDate } from '@/lib/utils';
 import { ProductionEntry, SaleEntry, UserProfile } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -149,7 +150,7 @@ export default function ActivityHistory() {
                   return (
                     <TableRow key={activity.id}>
                       <TableCell className="text-xs text-muted-foreground">
-                        {format(activity.date.toDate(), 'MMM dd, HH:mm:ss')}
+                        {format(safeToDate(activity.date), 'MMM dd, HH:mm:ss')}
                       </TableCell>
                       <TableCell>
                         <Badge variant={isProduction ? "secondary" : "outline"} className="gap-1 text-[10px]">

@@ -157,7 +157,14 @@ export default function BuiltyDetail() {
     if (!pageRef.current) return;
     
     toast.loading('Exporting builty record...');
-    toPng(pageRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+    const element = pageRef.current;
+    toPng(element, { 
+      backgroundColor: '#f8fafc', 
+      cacheBust: true,
+      pixelRatio: 2,
+      width: element.scrollWidth,
+      height: element.scrollHeight
+    })
       .then((dataUrl) => {
         const link = document.createElement('a');
         link.download = `Builty_${builty?.builtyNumber || 'Details'}.png`;

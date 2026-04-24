@@ -14,9 +14,10 @@ import {
 } from 'lucide-react';
 import { collection, query, onSnapshot, doc, getDocs, orderBy, Timestamp, where, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { MonthlyDetailedEntry, MonthlyReport } from '../types';
+import { MonthlyDetailedEntry, MonthlyReport, Product } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
+import { safeToDate } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,30 +53,44 @@ export default function DetailedReports() {
   const [reportType, setReportType] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
   const [reportDate, setReportDate] = useState(new Date());
   const [productStats, setProductStats] = useState<MonthlyDetailedEntry[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [summary, setSummary] = useState<MonthlyReport | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const reportAreaRef = React.useRef<HTMLDivElement>(null);
 
-  const downloadAsImage = () => {
+  const downloadAsImage = async () => {
     if (!reportAreaRef.current) return;
     
-    toast.loading('Preparing image download...');
-    toPng(reportAreaRef.current, { backgroundColor: '#ffffff', cacheBust: true })
-      .then((dataUrl) => {
-        const link = document.createElement('a');
-        link.download = `DetailedReport_${reportType}_${format(reportDate, 'yyyy-MM-dd')}.png`;
-        link.href = dataUrl;
-        link.click();
-        toast.dismiss();
-        toast.success('Report image downloaded successfully');
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.dismiss();
-        toast.error('Failed to capture report');
+    toast.loading('Capturing report image...');
+    try {
+      const element = reportAreaRef.current;
+      const dataUrl = await toPng(element, { 
+        backgroundColor: '#ffffff',
+        cacheBust: true,
+        pixelRatio: 2,
+        width: element.scrollWidth,
+        height: element.scrollHeight,
+        style: {
+          borderRadius: '0px',
+          margin: '0',
+          padding: '20px'
+        }
       });
+      
+      const link = document.createElement('a');
+      link.download = `DetailedReport_${reportType}_${format(reportDate, 'yyyy-MM-dd')}.png`;
+      link.href = dataUrl;
+      link.click();
+      toast.dismiss();
+      toast.success('Report image downloaded successfully');
+    } catch (err) {
+      console.error(err);
+      toast.dismiss();
+      toast.error('Failed to capture report');
+    }
   };
 
   const getRange = () => {
@@ -103,81 +118,88 @@ export default function DetailedReports() {
 
     const qProducts = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
     const unsubscribeProducts = onSnapshot(qProducts, (productSnapshot) => {
-      const allProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setProducts(productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+    });
 
-      const { start, end } = getRange();
-      
-      const qHistory = query(
-        collection(db, 'stockControlHistory'),
-        limit(500)
-      );
+    const qHistory = query(
+      collection(db, 'stockControlHistory'),
+      limit(500)
+    );
 
-      const unsubscribeHistory = onSnapshot(qHistory, (historySnapshot) => {
-        const { start, end } = getRange();
-        const historyDocs = historySnapshot.docs.map(doc => doc.data())
-          .filter(h => {
-             const d = h.date.toDate();
-             return d >= start && d <= end;
-          })
-          .sort((a, b) => b.date.seconds - a.date.seconds);
-
-        const productMap: Record<string, MonthlyDetailedEntry> = {};
-        let totalRev = 0;
-        let totalProd = 0;
-        let totalSales = 0;
-
-        historyDocs.forEach(h => {
-          (h.entries || []).forEach((e: any) => {
-            if (!productMap[e.productId]) {
-              productMap[e.productId] = {
-                productId: e.productId,
-                productName: e.productName || 'Unknown',
-                production: 0,
-                qtySold: 0,
-                revenue: 0,
-                price: e.price,
-                preparedStock: 0,
-                currentStock: 0,
-                imageUrl: e.imageUrl || (allProducts.find(p => p.id === e.productId) as any)?.imageUrl || ''
-              };
-            }
-            productMap[e.productId].production += (e.production || 0);
-            productMap[e.productId].qtySold += (e.qtySold || 0);
-            productMap[e.productId].revenue += ((e.qtySold || 0) * (e.price || 0));
-            
-            totalRev += ((e.qtySold || 0) * (e.price || 0));
-            totalProd += (e.production || 0);
-            totalSales += (e.qtySold || 0);
-          });
-        });
-
-        const sortedStats = allProducts
-          .map(p => productMap[p.id])
-          .filter(Boolean);
-
-        setProductStats(sortedStats);
-        
-        setSummary({
-          month: format(reportDate, 'yyyy-MM'),
-          totalRevenue: totalRev,
-          totalProduction: totalProd,
-          totalSalesQty: totalSales,
-          lastUpdated: historyDocs.length > 0 ? historyDocs[0].date : Timestamp.now(),
-          saveCount: historyDocs.length
-        });
-        setLoading(false);
-      }, (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'stockControlHistory');
-        setLoading(false);
-      });
-
-      return () => unsubscribeHistory();
+    const unsubscribeHistory = onSnapshot(qHistory, (historySnapshot) => {
+      setHistory(historySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'stockControlHistory');
     });
 
     return () => {
       unsubscribeProducts();
+      unsubscribeHistory();
     };
-  }, [user, reportDate, reportType]);
+  }, [user]);
+
+  // Derived state from products and history
+  useEffect(() => {
+    if (products.length === 0 || history.length === 0) {
+      if (history.length === 0) setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    const { start, end } = getRange();
+    
+    const historyDocs = history.filter(h => {
+       const d = safeToDate(h.date);
+       return d >= start && d <= end;
+    }).sort((a, b) => b.date.seconds - a.date.seconds);
+
+    const productMap: Record<string, MonthlyDetailedEntry> = {};
+    let totalRev = 0;
+    let totalProd = 0;
+    let totalSales = 0;
+
+    historyDocs.forEach(h => {
+      (h.entries || []).forEach((e: any) => {
+        if (!productMap[e.productId]) {
+          const product = products.find(p => p.id === e.productId);
+          productMap[e.productId] = {
+            productId: e.productId,
+            productName: e.productName || 'Unknown',
+            production: 0,
+            qtySold: 0,
+            revenue: 0,
+            price: e.price,
+            preparedStock: 0,
+            currentStock: 0,
+            imageUrl: e.imageUrl || (product as any)?.imageUrl || ''
+          };
+        }
+        productMap[e.productId].production += (e.production || 0);
+        productMap[e.productId].qtySold += (e.qtySold || 0);
+        productMap[e.productId].revenue += ((e.qtySold || 0) * (e.price || 0));
+        
+        totalRev += ((e.qtySold || 0) * (e.price || 0));
+        totalProd += (e.production || 0);
+        totalSales += (e.qtySold || 0);
+      });
+    });
+
+    const sortedStats = products
+      .map(p => productMap[p.id])
+      .filter(Boolean);
+
+    setProductStats(sortedStats);
+    
+    setSummary({
+      month: format(reportDate, 'yyyy-MM'),
+      totalRevenue: totalRev,
+      totalProduction: totalProd,
+      totalSalesQty: totalSales,
+      lastUpdated: historyDocs.length > 0 ? historyDocs[0].date : Timestamp.now(),
+      saveCount: historyDocs.length
+    });
+    setLoading(false);
+  }, [products, history, reportDate, reportType]);
 
   const filteredStats = productStats.filter(s => 
     s.productName.toLowerCase().includes(searchTerm.toLowerCase())

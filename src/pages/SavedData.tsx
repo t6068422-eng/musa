@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
+import { safeToDate } from '@/lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
 import { 
@@ -98,7 +99,7 @@ export default function SavedData() {
     toPng(detailRef.current, { backgroundColor: '#ffffff', cacheBust: true })
       .then((dataUrl) => {
         const link = document.createElement('a');
-        const dateStr = selectedRecord ? format(selectedRecord.date.toDate(), 'yyyy-MM-dd') : 'Record';
+        const dateStr = selectedRecord ? format(safeToDate(selectedRecord.date), 'yyyy-MM-dd') : 'Record';
         link.download = `StockDetail_${dateStr}.png`;
         link.href = dataUrl;
         link.click();
@@ -143,9 +144,10 @@ export default function SavedData() {
   };
 
   const downloadCSV = (record: StockHistory) => {
-    const dateStr = format(record.date.toDate(), 'yyyy-MM-dd');
-    const timeStr = format(record.date.toDate(), 'HH-mm-ss');
-    const dayStr = format(record.date.toDate(), 'EEEE');
+    const recordDate = safeToDate(record.date);
+    const dateStr = format(recordDate, 'yyyy-MM-dd');
+    const timeStr = format(recordDate, 'HH-mm-ss');
+    const dayStr = format(recordDate, 'EEEE');
     
     const customHeaders = record.customColumns.length > 0 ? `,${record.customColumns.join(',')}` : '';
     const header = `Product,Prepared Stock,Production,Qty Sold,Price,Revenue,New Prepared Stock${customHeaders}\n`;
@@ -208,10 +210,10 @@ export default function SavedData() {
                   <div className="flex justify-between items-start">
                     <CardTitle className="text-lg flex items-center gap-2">
                       <FileText className="w-5 h-5 text-primary" />
-                      {format(record.date.toDate(), 'dd MMM yyyy')}
+                      {format(safeToDate(record.date), 'dd MMM yyyy')}
                     </CardTitle>
                     <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
-                      {record.entries.length} Items
+                      {record.entries?.length || 0} Items
                     </Badge>
                   </div>
                 </CardHeader>
@@ -219,7 +221,7 @@ export default function SavedData() {
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Clock className="w-4 h-4" />
-                      {format(record.date.toDate(), 'hh:mm a')}
+                      {format(safeToDate(record.date), 'hh:mm a')}
                     </div>
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <UserIcon className="w-4 h-4" />
@@ -236,7 +238,7 @@ export default function SavedData() {
                       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle className="flex items-center gap-2">
-                            Stock Record - {format(record.date.toDate(), 'dd MMM yyyy, hh:mm a')}
+                            Stock Record - {format(safeToDate(record.date), 'dd MMM yyyy, hh:mm a')}
                           </DialogTitle>
                         </DialogHeader>
                         <div className="mt-4">

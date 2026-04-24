@@ -20,6 +20,7 @@ import { db } from '../lib/firebase';
 import { Product, ProductionEntry, SaleEntry, Client } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
+import { safeToDate } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,7 +59,14 @@ export default function Dashboard() {
     if (!dashboardRef.current) return;
     
     toast.loading('Capturing dashboard snapshot...');
-    toPng(dashboardRef.current, { backgroundColor: '#f8fafc', cacheBust: true })
+    const element = dashboardRef.current;
+    toPng(element, { 
+      backgroundColor: '#f8fafc', 
+      cacheBust: true,
+      pixelRatio: 2,
+      width: element.scrollWidth,
+      height: element.scrollHeight
+    })
       .then((dataUrl) => {
         const link = document.createElement('a');
         link.download = `Dashboard_${format(new Date(), 'yyyy-MM-dd')}.png`;
@@ -127,7 +135,7 @@ export default function Dashboard() {
       const sevenDaysAgo = startOfDay(subDays(new Date(), 7));
       
       const filtered = data.filter(s => {
-        const d = s.date.toDate();
+        const d = safeToDate(s.date);
         return d >= sevenDaysAgo;
       });
 
@@ -160,7 +168,7 @@ export default function Dashboard() {
       const endOfCurrMonth = endOfMonth(now);
 
       const historyDocs = allHistory.filter(doc => {
-        const d = doc.date.toDate();
+        const d = safeToDate(doc.date);
         return d >= startOfCurrMonth && d <= endOfCurrMonth;
       });
       
