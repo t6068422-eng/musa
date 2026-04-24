@@ -176,23 +176,30 @@ export default function Sales() {
 
   useEffect(() => {
     if (!user) return;
-    const qProducts = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const qProducts = query(collection(db, 'products'));
     const unsubscribeProducts = onSnapshot(qProducts, (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      setProducts(data.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');
     });
 
-    const qSales = query(collection(db, 'sales'), orderBy('date', 'desc'), limit(50));
+    const qSales = query(collection(db, 'sales'), limit(50));
     const unsubscribeLogs = onSnapshot(qSales, (snapshot) => {
-      setSalesLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SaleEntry)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SaleEntry));
+      setSalesLogs(data.sort((a, b) => {
+        const dateA = a.date?.toMillis() || 0;
+        const dateB = b.date?.toMillis() || 0;
+        return dateB - dateA;
+      }));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'sales');
     });
 
-    const qClients = query(collection(db, 'clients'), orderBy('name', 'asc'));
+    const qClients = query(collection(db, 'clients'));
     const unsubscribeClients = onSnapshot(qClients, (snapshot) => {
-      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
+      setClients(data.sort((a, b) => a.name.localeCompare(b.name)));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'clients');
     });

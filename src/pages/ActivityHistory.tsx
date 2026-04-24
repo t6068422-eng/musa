@@ -57,28 +57,38 @@ export default function ActivityHistory() {
     });
 
     const unsubscribeProduction = onSnapshot(
-      query(collection(db, 'production'), orderBy('date', 'desc'), limit(50)),
+      query(collection(db, 'production'), limit(50)),
       (snapshot) => {
         const production = snapshot.docs.map(doc => ({ 
           id: doc.id, 
           ...doc.data(), 
           type: 'production' as const 
         } as Activity));
-        updateActivities(production, 'production');
+        // Sort locally
+        updateActivities(production.sort((a, b) => {
+          const dateA = a.date?.toMillis() || 0;
+          const dateB = b.date?.toMillis() || 0;
+          return dateB - dateA;
+        }), 'production');
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, 'production');
       }
     );
 
     const unsubscribeSales = onSnapshot(
-      query(collection(db, 'sales'), orderBy('date', 'desc'), limit(50)),
+      query(collection(db, 'sales'), limit(50)),
       (snapshot) => {
         const sales = snapshot.docs.map(doc => ({ 
           id: doc.id, 
           ...doc.data(), 
           type: 'sale' as const 
         } as Activity));
-        updateActivities(sales, 'sale');
+        // Sort locally
+        updateActivities(sales.sort((a, b) => {
+          const dateA = a.date?.toMillis() || 0;
+          const dateB = b.date?.toMillis() || 0;
+          return dateB - dateA;
+        }), 'sale');
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, 'sales');
       }

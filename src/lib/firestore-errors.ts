@@ -1,4 +1,5 @@
 import { auth } from './firebase';
+import { toast } from 'sonner';
 
 export enum OperationType {
   CREATE = 'create',
@@ -32,8 +33,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   const isQuotaError = (error instanceof Error && error.message.includes('Quota exceeded')) || 
                        (error as any)?.code === 'resource-exhausted' ||
                        (error as any)?.code === '7'; // gRPC code for resource exhausted
+  
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMessage,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -53,37 +57,41 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
   // If it's a quota error, log a cleaner warning to avoid flooding
   if (isQuotaError) {
-    // Broadcast globally so the UI can respond
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('firestore-quota-exceeded'));
     }
     
-    // Log once only for the session to prevent flooding the console
     if (!(window as any).__quota_warned) {
-      console.warn(`[Quota Limit Reach]: Firestore free tier limit exceeded. Writes are temporarily disabled.`);
+      console.warn(`[Quota Limit Reach]: Firestore free tier limit exceeded.`);
       (window as any).__quota_warned = true;
     }
-    
-    // Don't throw for quota errors, just allow the app to be silent
     return;
   }
 
   // Detect network issues
-  const errorMsg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  const errorMsgLower = errorMessage.toLowerCase();
   const isNetworkError = 
-    errorMsg.includes('backend didn\'t respond') ||
-    errorMsg.includes('could not reach cloud firestore') ||
+    errorMsgLower.includes('backend didn\'t respond') ||
+    errorMsgLower.includes('could not reach cloud firestore') ||
     (error as any)?.code === 'unavailable' ||
     (error as any)?.code === 'deadline-exceeded';
 
   if (isNetworkError) {
     if (!(window as any).__network_warned) {
-      console.warn(`[Firestore Offline]: Network issues detected. The client will operate in offline mode.`);
+      console.warn(`[Firestore Offline]: Network issues detected.`);
       (window as any).__network_warned = true;
     }
     return;
   }
 
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('Firestore Error:', errInfo);
+  
+  // Show toast for user awareness instead of crashing
+  if (operationType === OperationType.LIST || operationType === OperationType.GET) {
+    toast.error(`Error loading ${path || 'data'}: ${errorMessage}`);
+  } else {
+    toast.error(`Error performing ${operationType} on ${path || 'data'}: ${errorMessage}`);
+  }
+
+  // Do NOT throw to avoid crashing the whole component tree
 }

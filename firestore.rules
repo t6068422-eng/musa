@@ -69,21 +69,17 @@ service cloud.firestore {
 
     match /products/{productId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidProduct(incoming()) && isValidId(productId);
-      allow update: if isSignedIn() && isValidProduct(incoming());
-      allow delete: if isSignedIn();
+      allow write: if isSignedIn();
     }
 
     match /production/{productionId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(productionId);
-      allow delete: if isSignedIn();
+      allow write: if isSignedIn();
     }
 
     match /sales/{saleId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(saleId);
-      allow delete: if isSignedIn();
+      allow write: if isSignedIn();
     }
 
     match /settings/{settingId} {
@@ -93,19 +89,17 @@ service cloud.firestore {
 
     match /clients/{clientId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && isValidId(clientId);
+      allow write: if isSignedIn();
     }
 
     match /builties/{builtyId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidBuilty(incoming()) && isValidId(builtyId);
-      allow update: if isSignedIn() && isValidBuilty(incoming());
-      allow delete: if isSignedIn();
+      allow write: if isSignedIn();
     }
 
     match /stockControlHistory/{historyId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && isValidId(historyId);
+      allow write: if isSignedIn();
     }
 
     match /monthlyReports/{reportId} {

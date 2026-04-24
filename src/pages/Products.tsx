@@ -137,10 +137,13 @@ export default function Products() {
       handleFirestoreError(error, OperationType.GET, 'settings/stockControl');
     });
 
-    const q = query(collection(db, 'products'), orderBy('name', 'asc'));
+    const q = query(collection(db, 'products'));
     const unsubscribeProducts = onSnapshot(q, (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      // Sort locally to avoid index requirement
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      setProducts(data.sort((a, b) => a.name.localeCompare(b.name)));
     }, (error) => {
+      console.error('Products fetch error:', error);
       handleFirestoreError(error, OperationType.LIST, 'products');
     });
     return () => {
@@ -166,7 +169,8 @@ export default function Products() {
       setIsAddDialogOpen(false);
       setFormData({ name: '', category: '', unit: '', minStockLevel: 0, currentStock: 0, price: 0, imageUrl: '' });
     } catch (error: any) {
-      toast.error('Failed to add product');
+      console.error('Add product error:', error);
+      toast.error('Failed to add product: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -185,7 +189,8 @@ export default function Products() {
       toast.success('Product updated successfully');
       setEditingProduct(null);
     } catch (error: any) {
-      toast.error('Failed to update product');
+      console.error('Update product error:', error);
+      toast.error('Failed to update product: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -199,10 +204,11 @@ export default function Products() {
       toast.success('Product deleted');
       setProductToDelete(null);
     } catch (error: any) {
+      console.error('Delete product error:', error);
       if (error?.code === 'resource-exhausted') {
         toast.error('Quota Limit: Cannot delete from cloud.');
       } else {
-        toast.error('Failed to delete product');
+        toast.error('Failed to delete product: ' + (error.message || 'Unknown error'));
       }
     } finally {
       setIsDeleting(false);

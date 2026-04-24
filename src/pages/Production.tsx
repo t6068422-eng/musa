@@ -107,16 +107,22 @@ export default function Production() {
 
   useEffect(() => {
     if (!user) return;
-    const q_products = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const q_products = query(collection(db, 'products'));
     const unsubscribeProducts = onSnapshot(q_products, (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      setProducts(data.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');
     });
 
-    const q = query(collection(db, 'production'), orderBy('date', 'desc'), limit(50));
+    const q = query(collection(db, 'production'), limit(50));
     const unsubscribeLogs = onSnapshot(q, (snapshot) => {
-      setProductionLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProductionEntry)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProductionEntry));
+      setProductionLogs(data.sort((a, b) => {
+        const dateA = a.date?.toMillis() || 0;
+        const dateB = b.date?.toMillis() || 0;
+        return dateB - dateA;
+      }));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'production');
     });

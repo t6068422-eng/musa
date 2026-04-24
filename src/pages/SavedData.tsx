@@ -115,9 +115,14 @@ export default function SavedData() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'stockControlHistory'), orderBy('date', 'desc'), limit(100));
+    const q = query(collection(db, 'stockControlHistory'), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockHistory)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockHistory));
+      setHistory(data.sort((a, b) => {
+        const dateA = a.date?.toMillis() || 0;
+        const dateB = b.date?.toMillis() || 0;
+        return dateB - dateA;
+      }));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'stockControlHistory');

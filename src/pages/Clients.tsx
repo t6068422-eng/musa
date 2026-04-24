@@ -124,9 +124,14 @@ export default function Clients() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'clients'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
+      setClients(data.sort((a, b) => {
+        const dateA = a.createdAt?.toMillis() || 0;
+        const dateB = b.createdAt?.toMillis() || 0;
+        return dateB - dateA; // desc
+      }));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'clients');
     });
