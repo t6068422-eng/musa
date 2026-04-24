@@ -29,6 +29,7 @@ import {
   query,
   orderBy,
   doc,
+  limit,
   addDoc,
   setDoc,
   deleteDoc,
@@ -132,7 +133,7 @@ export default function Builties() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'builties'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'builties'), orderBy('createdAt', 'desc'), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setBuilties(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Builty)));
     }, (error) => {

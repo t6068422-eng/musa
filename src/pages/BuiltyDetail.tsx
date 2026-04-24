@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, 
+  ArrowLeft,
+  Plus, 
+  Search, 
   Truck, 
   User, 
   MapPin, 
@@ -20,7 +22,7 @@ import {
   Image as ImageIcon,
   Trash2,
   Clock as ClockIcon,
-  Search,
+  X,
   History as HistoryIcon
 } from 'lucide-react';
 import { 
@@ -28,7 +30,10 @@ import {
   onSnapshot, 
   updateDoc,
   Timestamp,
-  deleteDoc
+  deleteDoc,
+  collection,
+  query,
+  orderBy
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
@@ -77,6 +82,26 @@ export default function BuiltyDetail() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemSearch, setItemSearch] = useState('');
+  const [isEditingItems, setIsEditingItems] = useState(false);
+  const [products, setProducts] = useState<any[]>([]);
+  const [editFormData, setEditFormData] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'products'), orderBy('name', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.warn('Failed to fetch products:', error);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    if (builty && isEditingItems) {
+      setEditFormData(builty.items || []);
+    }
+  }, [builty, isEditingItems]);
 
   useEffect(() => {
     if (!user || !builtyId) return;
@@ -107,6 +132,24 @@ export default function BuiltyDetail() {
       toast.success(`Status updated to ${newStatus}`);
     } catch (error) {
       toast.error('Failed to update status');
+    }
+  };
+
+  const handleUpdateItems = async () => {
+    if (!builty) return;
+    if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
+    
+    try {
+      const totalItems = editFormData.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+      await updateDoc(doc(db, 'builties', builty.id), {
+        items: editFormData,
+        totalItems
+      });
+      toast.success('Items updated successfully');
+      setIsEditingItems(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to update items');
     }
   };
 
@@ -294,14 +337,26 @@ export default function BuiltyDetail() {
                    <Package className="w-5 h-5 text-primary" />
                    Itemized Consignment
                 </CardTitle>
-                <div className="relative w-48 print:hidden">
-                  <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input
-                    placeholder="Search products..."
-                    className="pl-8 h-8 text-xs"
-                    value={itemSearch}
-                    onChange={(e) => setItemSearch(e.target.value)}
-                  />
+                <div className="flex items-center gap-2 print:hidden">
+                  {isAdmin && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-8 gap-1 border-primary/20 hover:bg-primary/5 text-primary"
+                      onClick={() => setIsEditingItems(true)}
+                    >
+                      <Edit2 className="w-3 h-3" /> Manage Items
+                    </Button>
+                  )}
+                  <div className="relative w-40">
+                    <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Filter..."
+                      className="pl-8 h-8 text-xs"
+                      value={itemSearch}
+                      onChange={(e) => setItemSearch(e.target.value)}
+                    />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -430,6 +485,122 @@ export default function BuiltyDetail() {
             <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
               {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Items Dialog */}
+      <Dialog open={isEditingItems} onOpenChange={setIsEditingItems}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-primary" />
+              Manage Consignment Items
+            </DialogTitle>
+            <DialogDescription>
+              Add or remove products from this consignment.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="max-h-[50vh] overflow-y-auto space-y-4 py-4 pr-1">
+            {editFormData.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed rounded-xl bg-muted/30 text-muted-foreground">
+                <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                <p>No items added yet</p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-4"
+                  onClick={() => setEditFormData([{ productId: '', productName: '', quantity: 1, price: 0 }])}
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Add First Item
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {editFormData.map((item, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-2 items-end p-3 rounded-xl bg-muted/30 border border-border/50 relative">
+                    <div className="col-span-6 space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Product</label>
+                      <Select 
+                        value={item.productId} 
+                        onValueChange={(val) => {
+                          const prod = products.find(p => p.id === val);
+                          const next = [...editFormData];
+                          next[index] = { 
+                            ...next[index], 
+                            productId: val, 
+                            productName: prod?.name || '',
+                            price: prod?.price || 0
+                          };
+                          setEditFormData(next);
+                        }}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {products.map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-2 space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Qty</label>
+                      <Input 
+                        type="number" 
+                        className="h-9 text-center font-bold" 
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const next = [...editFormData];
+                          next[index].quantity = Math.max(1, Number(e.target.value));
+                          setEditFormData(next);
+                        }}
+                      />
+                    </div>
+                    <div className="col-span-3 space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Price</label>
+                      <Input 
+                        type="number" 
+                        className="h-9" 
+                        value={item.price}
+                        onChange={(e) => {
+                          const next = [...editFormData];
+                          next[index].price = Number(e.target.value);
+                          setEditFormData(next);
+                        }}
+                      />
+                    </div>
+                    <div className="col-span-1 pb-0.5">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                        onClick={() => setEditFormData(editFormData.filter((_, i) => i !== index))}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                
+                <Button 
+                  variant="outline" 
+                  className="w-full h-10 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5"
+                  onClick={() => setEditFormData([...editFormData, { productId: '', productName: '', quantity: 1, price: 0 }])}
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Add More Items
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="border-t pt-4">
+            <Button variant="ghost" onClick={() => setIsEditingItems(false)}>Cancel</Button>
+            <Button onClick={handleUpdateItems} className="gap-2">
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>

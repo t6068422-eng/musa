@@ -3,6 +3,7 @@ import {
   collection, 
   query, 
   orderBy, 
+  limit,
   onSnapshot, 
   doc, 
   deleteDoc,
@@ -113,7 +114,7 @@ export default function SavedData() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'stockControlHistory'), orderBy('date', 'desc'));
+    const q = query(collection(db, 'stockControlHistory'), orderBy('date', 'desc'), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StockHistory)));
       setLoading(false);
@@ -183,7 +184,7 @@ export default function SavedData() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Saved Stock Data</h1>
-          <p className="text-muted-foreground">View and download historical stock control records.</p>
+          <p className="text-muted-foreground">View and download historical stock control records. (Showing last 100 entries)</p>
         </div>
         <Button onClick={downloadSummaryAsImage} variant="outline" className="gap-2 self-start">
           <ImageIcon className="w-4 h-4" /> Download Overview (Picture)

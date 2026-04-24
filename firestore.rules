@@ -46,12 +46,20 @@ service cloud.firestore {
              data.category is string;
     }
 
+    function isValidBuiltyItem(item) {
+      return item.productId is string &&
+             item.productName is string && item.productName.size() > 0 &&
+             item.quantity is number && item.quantity >= 0 &&
+             item.price is number && item.price >= 0;
+    }
+
     function isValidBuilty(data) {
       return data.builtyNumber is string && data.builtyNumber.size() > 0 &&
              data.senderName is string &&
              data.receiverName is string &&
              data.destination is string &&
-             data.date is timestamp;
+             data.date is timestamp &&
+             (!('items' in data) || data.items is list);
     }
 
     // ===============================================================
@@ -93,11 +101,9 @@ service cloud.firestore {
     }
 
     match /builties/{builtyId} {
-      // Explicitly allow list queries for signed in users
-      allow list: if isSignedIn();
-      allow get: if isSignedIn();
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidBuilty(incoming()) && isValidId(builtyId);
-      allow update: if isSignedIn() && isValidBuilty(incoming());
+      allow update: if isSignedIn() && (isValidBuilty(incoming()) || isAdmin());
       allow delete: if isAdmin();
     }
 

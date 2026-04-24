@@ -10,15 +10,19 @@ import {
   Calendar,
   FileBarChart,
   Download,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Wifi,
+  WifiOff as WifiOffIcon,
+  Database
 } from 'lucide-react';
-import { collection, query, where, onSnapshot, Timestamp, orderBy, doc, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, orderBy, doc, limit, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Product, ProductionEntry, SaleEntry, Client } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { 
   BarChart, 
   Bar, 
@@ -45,7 +49,9 @@ export default function Dashboard() {
   const [recentSales, setRecentSales] = useState<any[]>([]);
   const [monthlyStats, setMonthlyStats] = useState<any>(null);
   const [clients, setClients] = useState<Client[]>([]);
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'loading'>('loading');
   const dashboardRef = React.useRef<HTMLDivElement>(null);
 
   const downloadAsImage = () => {
@@ -70,6 +76,15 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
+    
+    // Check connection
+    const unsubStatus = onSnapshot(doc(db, 'test', 'connection'), () => {
+      setDbStatus('connected');
+    }, (err) => {
+      console.warn('DB Connection error:', err);
+      setDbStatus('error');
+    });
+
     const q_products = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
     const unsubscribeProducts = onSnapshot(q_products, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
@@ -181,6 +196,7 @@ export default function Dashboard() {
     });
 
     return () => {
+      unsubStatus();
       unsubscribeProducts();
       unsubscribeProduction();
       unsubscribeSales();
@@ -189,6 +205,30 @@ export default function Dashboard() {
       unsubscribeClients();
     };
   }, [user]);
+
+  const seedSampleData = async () => {
+    if (!isAdmin) return;
+    setIsSeeding(true);
+    const toastId = toast.loading('Seeding sample products...');
+    try {
+      const sampleProducts = [
+        { name: 'Red Brick Standard', currentStock: 25000, minStockLevel: 5000, unit: 'pcs', category: 'Bricks', price: 12, createdAt: Timestamp.now() },
+        { name: 'Red Brick Premium', currentStock: 15000, minStockLevel: 3000, unit: 'pcs', category: 'Bricks', price: 15, createdAt: Timestamp.now() },
+        { name: 'Cement OPC', currentStock: 800, minStockLevel: 100, unit: 'bags', category: 'Construction', price: 1250, createdAt: Timestamp.now() },
+        { name: 'Steel Ribbed 12mm', currentStock: 5000, minStockLevel: 500, unit: 'kg', category: 'Steel', price: 280, createdAt: Timestamp.now() }
+      ];
+
+      for (const product of sampleProducts) {
+        await addDoc(collection(db, 'products'), product);
+      }
+      
+      toast.success('Sample data seeded successfully', { id: toastId });
+    } catch (error: any) {
+      toast.error('Failed to seed data: ' + error.message, { id: toastId });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
 
   const lowStockItems = products.filter(p => p.currentStock <= p.minStockLevel);
   const totalProductionToday = todayProduction.reduce((sum, p) => sum + p.quantity, 0);
@@ -231,12 +271,36 @@ export default function Dashboard() {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            Dashboard
+            {dbStatus === 'connected' ? (
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 gap-1 animate-in fade-in zoom-in duration-300">
+                <Wifi className="w-3 h-3" /> Live
+              </Badge>
+            ) : dbStatus === 'error' ? (
+              <Badge variant="destructive" className="gap-1 animate-pulse">
+                <WifiOffIcon className="w-3 h-3" /> Offline
+              </Badge>
+            ) : null}
+          </h2>
           <p className="text-muted-foreground">Welcome back to MUSA TRADERS management console.</p>
         </div>
-        <Button variant="outline" className="gap-2 self-start md:self-auto" onClick={downloadAsImage}>
-          <ImageIcon className="w-4 h-4" /> Download Snapshot
-        </Button>
+        <div className="flex items-center gap-2">
+          {isAdmin && products.length === 0 && (
+            <Button 
+              variant="outline" 
+              className="gap-2 text-primary border-primary/20 hover:bg-primary/5" 
+              onClick={seedSampleData}
+              disabled={isSeeding}
+            >
+              <Database className="w-4 h-4" /> 
+              {isSeeding ? 'Seeding...' : 'Seed Data'}
+            </Button>
+          )}
+          <Button variant="outline" className="gap-2 self-start md:self-auto" onClick={downloadAsImage}>
+            <ImageIcon className="w-4 h-4" /> Download Snapshot
+          </Button>
+        </div>
       </div>
 
       <div ref={dashboardRef} className="space-y-8">

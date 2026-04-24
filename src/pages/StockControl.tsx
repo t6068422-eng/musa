@@ -181,55 +181,71 @@ export default function StockControl() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [user?.uid]);
 
-  // collaborative Draft (Live Sync)
+  // Collaborative Draft (Live Sync & Restore)
   useEffect(() => {
     if (!user || products.length === 0) return;
 
     const initializeData = async () => {
+      let loadedEntries: Record<string, StockEntry> = {};
+      let loadedCols: string[] = [];
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+
       // 1. Try local storage first (fastest)
       const saved = localStorage.getItem(`stockDraft_${user.uid}`);
       if (saved) {
         try {
-          const { entries: savedEntries, customColumns: savedCols } = JSON.parse(saved);
-          if (savedEntries && Object.keys(savedEntries).length > 0) {
-            setEntries(prev => {
-              const next = { ...prev };
-              Object.keys(savedEntries).forEach(id => {
-                if (!next[id]) {
-                  next[id] = savedEntries[id];
-                }
-              });
-              return next;
-            });
-            if (savedCols && customColumns.length === 0) setCustomColumns(savedCols);
-            // We don't return here anymore, because we might want to check cloud too
+          const parsed = JSON.parse(saved);
+          // Check if draft is from today. If not, we might want to clear production/sales
+          const draftDate = parsed.timestamp ? format(new Date(parsed.timestamp), 'yyyy-MM-dd') : null;
+          
+          if (parsed.entries) {
+            loadedEntries = parsed.entries;
+            // If it's a new day, we reset production and sales but keep prices and custom fields
+            if (draftDate && draftDate !== todayStr) {
+               Object.keys(loadedEntries).forEach(id => {
+                 loadedEntries[id].production = 0;
+                 loadedEntries[id].qtySold = 0;
+               });
+            }
           }
+          if (parsed.customColumns) loadedCols = parsed.customColumns;
         } catch (e) {
           console.error('Failed to parse localStorage draft:', e);
         }
       }
 
-      // 2. Merge from Cloud Draft as well (to recover missing gaps)
+      // 2. Load from Cloud Draft to merge/restore
       try {
         const draftRef = doc(db, 'settings', 'stockControlDraft');
         const snap = await getDoc(draftRef);
         if (snap.exists()) {
           const data = snap.data();
+          const cloudDraftDate = data.lastUpdated ? format(data.lastUpdated.toDate(), 'yyyy-MM-dd') : null;
+          
           if (data.entries) {
-            setEntries(prev => {
-              const next = { ...prev };
-              Object.keys(data.entries).forEach(id => {
-                if (!next[id]) {
-                  next[id] = data.entries[id];
+            Object.keys(data.entries).forEach(id => {
+              // Merge: favor existing local entries if they exist and we haven't saved to cloud yet
+              if (!loadedEntries[id]) {
+                loadedEntries[id] = data.entries[id];
+                // Reset daily inputs if cloud draft is old
+                if (cloudDraftDate && cloudDraftDate !== todayStr) {
+                  loadedEntries[id].production = 0;
+                  loadedEntries[id].qtySold = 0;
                 }
-              });
-              return next;
+              }
             });
-            if (data.customColumns && customColumns.length === 0) setCustomColumns(data.customColumns);
           }
+          if (data.customColumns && loadedCols.length === 0) loadedCols = data.customColumns;
         }
       } catch (err) {
         console.error('Failed to auto-load cloud draft:', err);
+      }
+
+      if (Object.keys(loadedEntries).length > 0) {
+        setEntries(loadedEntries);
+      }
+      if (loadedCols.length > 0) {
+        setCustomColumns(loadedCols);
       }
     };
 
@@ -259,7 +275,7 @@ export default function StockControl() {
     }
   }, [entries, customColumns, user, products.length]);
 
-  // Listen for storage events for cross-tab sync
+  // Unified cross-tab storage listener
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === `stockDraft_${user?.uid}` && e.newValue) {
@@ -269,7 +285,7 @@ export default function StockControl() {
 
         try {
           const localData = JSON.parse(e.newValue);
-          setEntries(localData.entries);
+          if (localData.entries) setEntries(localData.entries);
           if (localData.customColumns) setCustomColumns(localData.customColumns);
         } catch (err) {
           console.error('Failed to parse storage sync:', err);
@@ -977,7 +993,13 @@ export default function StockControl() {
                   </TableRow>
                 ) : (
                   filteredProducts.map((product) => {
-                    const entry = entries[product.id] || { production: 0, qtySold: 0, price: 0, preparedStock: product.currentStock, customFields: {} };
+                    const entry = entries[product.id] || { 
+                      production: 0, 
+                      qtySold: 0, 
+                      price: product.price || 0, 
+                      preparedStock: product.currentStock, 
+                      customFields: product.customFields || {} 
+                    };
                     const newStock = entry.preparedStock - entry.qtySold;
                     const revenue = entry.qtySold * entry.price;
                     const isLowStock = newStock <= product.minStockLevel;
