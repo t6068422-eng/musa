@@ -167,8 +167,8 @@ export default function StockControl() {
     // Fetch Recent History
     const historyQ = query(collection(db, 'stockControlHistory'), limit(5));
     const unsubscribeHistory = onSnapshot(historyQ, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setRecentHistory(data.sort((a, b) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      setRecentHistory(data.sort((a: any, b: any) => {
         const dateA = a.date?.toMillis() || 0;
         const dateB = b.date?.toMillis() || 0;
         return dateB - dateA;

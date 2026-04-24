@@ -13,8 +13,7 @@ import {
   Image as ImageIcon,
   Wifi,
   WifiOff as WifiOffIcon,
-  Database,
-  X
+  Database
 } from 'lucide-react';
 import { collection, query, where, onSnapshot, Timestamp, orderBy, doc, limit, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -52,7 +51,6 @@ export default function Dashboard() {
   const [monthlyStats, setMonthlyStats] = useState<any>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const { user } = useAuth();
-  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'loading'>('loading');
   const dashboardRef = React.useRef<HTMLDivElement>(null);
@@ -309,55 +307,11 @@ export default function Dashboard() {
               {isSeeding ? 'Seeding...' : 'Seed Data'}
             </Button>
           )}
-            <Button variant="outline" className="gap-2 self-start md:self-auto" onClick={downloadAsImage}>
+          <Button variant="outline" className="gap-2 self-start md:self-auto" onClick={downloadAsImage}>
             <ImageIcon className="w-4 h-4" /> Download Snapshot
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => setShowDiagnostics(true)} className="text-muted-foreground/30 hover:text-primary">
-            <AlertTriangle className="w-4 h-4" />
           </Button>
         </div>
       </div>
-
-      {showDiagnostics && (
-        <Card className="border-primary bg-primary/5 p-4 mb-8">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg font-bold">System Diagnostics</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => setShowDiagnostics(false)}><X className="h-4 w-4"/></Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-              <div className="space-y-1">
-                <p className="font-bold text-muted-foreground uppercase">User Identity</p>
-                <p className="truncate">{user.uid}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="font-bold text-muted-foreground uppercase">Email Status</p>
-                <p>{user.email} ({user.emailVerified ? 'Verified' : 'Unverified'})</p>
-              </div>
-              <div className="space-y-1">
-                <p className="font-bold text-muted-foreground uppercase">Connection State</p>
-                <p className={dbStatus === 'connected' ? 'text-emerald-500 font-bold' : 'text-red-500 font-bold'}>
-                  {dbStatus.toUpperCase()}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <p className="font-bold text-muted-foreground uppercase">Database ID</p>
-                <p className="truncate">{(db as any)._databaseId?.database || 'default'}</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => {
-                const config = localStorage.getItem('firebaseConfig');
-                console.log('Firebase Config Debug:', config);
-                toast.info('Firebase config logged to browser console');
-              }}>Debug Config</Button>
-              <Button size="sm" variant="outline" onClick={() => {
-                location.reload();
-              }}>Refresh App</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div ref={dashboardRef} className="space-y-8">
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">

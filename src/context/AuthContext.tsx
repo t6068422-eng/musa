@@ -31,8 +31,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      setLoading(false);
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        setLoading(false);
+      } else {
+        // Provide a guest user to bypass login checks if user doesn't want auth
+        setUser({ 
+          uid: 'guest_user', 
+          email: 'guest@musatraders.local',
+          displayName: 'Musa Traders Admin',
+          emailVerified: true
+        } as User);
+        setLoading(false);
+      }
     });
 
     return () => unsubscribeAuth();

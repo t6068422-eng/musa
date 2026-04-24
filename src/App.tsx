@@ -19,55 +19,33 @@ import Clients from './pages/Clients';
 import ClientDetail from './pages/ClientDetail';
 import Builties from './pages/Builties';
 import BuiltyDetail from './pages/BuiltyDetail';
-import Login from './pages/Login';
-
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-  
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  return <>{children}</>;
-}
 
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
       <Route
         path="/*"
         element={
-          <ProtectedRoute>
-            <Layout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/products" element={<Products />} />
-                <Route path="/production" element={<Production />} />
-                <Route path="/sales" element={<Sales />} />
-                <Route path="/stock-control" element={<StockControl />} />
-                <Route path="/saved-data" element={<SavedData />} />
-                <Route path="/monthly-report" element={<MonthlyReport />} />
-                <Route path="/clients" element={<Clients />} />
-                <Route path="/clients/:clientId" element={<ClientDetail />} />
-                <Route path="/builties" element={<Builties />} />
-                <Route path="/builties/:builtyId" element={<BuiltyDetail />} />
-                <Route path="/prepared-stock" element={<PreparedStock />} />
-                <Route path="/available-stock" element={<AvailableStock />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/history" element={<ActivityHistory />} />
-                <Route path="*" element={<Navigate to="/" />} />
-              </Routes>
-            </Layout>
-          </ProtectedRoute>
+          <Layout>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/products" element={<Products />} />
+              <Route path="/production" element={<Production />} />
+              <Route path="/sales" element={<Sales />} />
+              <Route path="/stock-control" element={<StockControl />} />
+              <Route path="/saved-data" element={<SavedData />} />
+              <Route path="/monthly-report" element={<MonthlyReport />} />
+              <Route path="/clients" element={<Clients />} />
+              <Route path="/clients/:clientId" element={<ClientDetail />} />
+              <Route path="/builties" element={<Builties />} />
+              <Route path="/builties/:builtyId" element={<BuiltyDetail />} />
+              <Route path="/prepared-stock" element={<PreparedStock />} />
+              <Route path="/available-stock" element={<AvailableStock />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/history" element={<ActivityHistory />} />
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </Layout>
         }
       />
     </Routes>
