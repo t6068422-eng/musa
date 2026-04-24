@@ -129,9 +129,10 @@ export default function Reports() {
       toast.error('Failed to load sales data');
     });
 
-    const q_products = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const q_products = query(collection(db, 'products'));
     const unsubscribeProducts = onSnapshot(q_products, (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      setProducts(data.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)));
     }, (error) => {
       console.error(error);
     });

@@ -122,9 +122,10 @@ export default function Builties() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'products'), orderBy('name', 'asc')); // Fetch products
+    const q = query(collection(db, 'products')); // Fetch products
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setProducts(data.sort((a: any, b: any) => a.name.localeCompare(b.name)));
     }, (error) => {
       console.warn('Failed to fetch products:', error);
     });
@@ -133,9 +134,14 @@ export default function Builties() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'builties'), orderBy('createdAt', 'desc'), limit(50));
+    const q = query(collection(db, 'builties'), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setBuilties(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Builty)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Builty));
+      setBuilties(data.sort((a, b) => {
+        const dateA = a.createdAt?.toMillis() || 0;
+        const dateB = b.createdAt?.toMillis() || 0;
+        return dateB - dateA;
+      }));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'builties');
     });
@@ -145,9 +151,10 @@ export default function Builties() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'clients'), orderBy('name', 'asc'));
+    const q = query(collection(db, 'clients'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
+      setClients(data.sort((a, b) => a.name.localeCompare(b.name)));
     }, (error) => {
       console.warn('Failed to fetch clients for dropdown:', error);
     });

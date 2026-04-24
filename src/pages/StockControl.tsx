@@ -153,10 +153,11 @@ export default function StockControl() {
     });
 
     // Fetch Products
-    const q = query(collection(db, 'products'), orderBy('name', 'asc'));
+    const q = query(collection(db, 'products'));
     const unsubscribeProducts = onSnapshot(q, (snapshot) => {
       const productsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-      setProducts(productsData);
+      const sortedProducts = productsData.sort((a, b) => a.name.localeCompare(b.name));
+      setProducts(sortedProducts);
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');
@@ -164,9 +165,14 @@ export default function StockControl() {
     });
 
     // Fetch Recent History
-    const historyQ = query(collection(db, 'stockControlHistory'), orderBy('date', 'desc'), limit(5));
+    const historyQ = query(collection(db, 'stockControlHistory'), limit(5));
     const unsubscribeHistory = onSnapshot(historyQ, (snapshot) => {
-      setRecentHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setRecentHistory(data.sort((a, b) => {
+        const dateA = a.date?.toMillis() || 0;
+        const dateB = b.date?.toMillis() || 0;
+        return dateB - dateA;
+      }));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'stockControlHistory');
     });

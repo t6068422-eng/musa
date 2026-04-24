@@ -88,9 +88,10 @@ export default function BuiltyDetail() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'products'), orderBy('name', 'asc'));
+    const q = query(collection(db, 'products'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setProducts(data.sort((a: any, b: any) => a.name.localeCompare(b.name)));
     }, (error) => {
       console.warn('Failed to fetch products:', error);
     });

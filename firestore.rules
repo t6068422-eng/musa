@@ -5,7 +5,7 @@ service cloud.firestore {
     // Global Safety Net: Default Deny
     // ===============================================================
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isDev();
     }
 
     // ===============================================================

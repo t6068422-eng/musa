@@ -43,9 +43,10 @@ export default function AvailableStock() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const q = query(collection(db, 'products'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      setProducts(data.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'products');
     });

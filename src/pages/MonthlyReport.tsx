@@ -116,9 +116,10 @@ export default function DetailedReports() {
     if (!user) return;
     setLoading(true);
 
-    const qProducts = query(collection(db, 'products'), orderBy('createdAt', 'asc'));
+    const qProducts = query(collection(db, 'products'));
     const unsubscribeProducts = onSnapshot(qProducts, (productSnapshot) => {
-      setProducts(productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      const data = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      setProducts(data.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)));
     });
 
     const qHistory = query(

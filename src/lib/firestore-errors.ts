@@ -61,6 +61,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       window.dispatchEvent(new CustomEvent('firestore-quota-exceeded'));
     }
     
+    toast.error('Cloud Quota Exceeded: Your daily limit for database actions has been reached. Operations will resume tomorrow.');
+    
     if (!(window as any).__quota_warned) {
       console.warn(`[Quota Limit Reach]: Firestore free tier limit exceeded.`);
       (window as any).__quota_warned = true;

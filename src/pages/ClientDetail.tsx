@@ -139,9 +139,10 @@ export default function ClientDetail() {
     if (!user || !clientId) return;
 
     // Fetch Products for selection
-    const qProducts = query(collection(db, 'products'), orderBy('name', 'asc'));
+    const qProducts = query(collection(db, 'products'));
     const unsubscribeProducts = onSnapshot(qProducts, (snapshot) => {
-      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      setProducts(data.sort((a, b) => a.name.localeCompare(b.name)));
     });
 
     // Fetch Client Details
@@ -159,12 +160,16 @@ export default function ClientDetail() {
     // Fetch client purchase history
     const q = query(
       collection(db, 'sales'),
-      where('clientId', '==', clientId),
-      orderBy('date', 'desc')
+      where('clientId', '==', clientId)
     );
 
     const unsubscribeHistory = onSnapshot(q, (snapshot) => {
-      setPurchaseHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SaleEntry)));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SaleEntry));
+      setPurchaseHistory(data.sort((a, b) => {
+        const dateA = a.date?.toMillis() || 0;
+        const dateB = b.date?.toMillis() || 0;
+        return dateB - dateA;
+      }));
       setLoading(false);
     }, (error) => {
       console.error(error);
@@ -177,15 +182,19 @@ export default function ClientDetail() {
     // Limit to 200 recent builties to avoid massive READ hits
     const qBuilties = query(
       collection(db, 'builties'),
-      orderBy('date', 'desc'),
       limit(200)
     );
 
     const unsubscribeBuilties = onSnapshot(qBuilties, (snapshot) => {
       if (!client?.name) return;
       const allBuilties = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Builty));
+      const sortedBuilties = allBuilties.sort((a, b) => {
+        const dateA = a.date?.toMillis() || 0;
+        const dateB = b.date?.toMillis() || 0;
+        return dateB - dateA;
+      });
       // Filter by receiver name
-      setBuilties(allBuilties.filter(b => 
+      setBuilties(sortedBuilties.filter(b => 
         (b.receiverName?.toLowerCase() || '').includes(client.name.toLowerCase()) ||
         (b.senderName?.toLowerCase() || '').includes(client.name.toLowerCase())
       ));
