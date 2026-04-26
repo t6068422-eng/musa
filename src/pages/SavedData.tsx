@@ -52,6 +52,7 @@ interface HistoryEntry {
   production: number;
   qtySold: number;
   price: number;
+  unitType?: 'ctn' | 'piece';
   preparedStock: number;
   customFields: Record<string, any>;
   imageUrl?: string;

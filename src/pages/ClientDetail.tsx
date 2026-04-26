@@ -80,7 +80,7 @@ import {
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { cn, safeToDate } from '@/lib/utils';
 import { toPng } from 'html-to-image';
 
 export default function ClientDetail() {
@@ -510,7 +510,8 @@ export default function ClientDetail() {
   });
 
   const groupedPurchases = filteredHistory.reduce((acc: Record<string, SaleEntry[]>, sale) => {
-    const dateKey = format(sale.date.toDate(), 'yyyy-MM-dd');
+    const saleDate = safeToDate(sale.date);
+    const dateKey = format(saleDate, 'yyyy-MM-dd');
     if (!acc[dateKey]) acc[dateKey] = [];
     acc[dateKey].push(sale);
     return acc;
@@ -525,8 +526,8 @@ export default function ClientDetail() {
     }));
   };
 
-  const grandTotalQty = filteredHistory.reduce((sum, h) => sum + h.quantity, 0);
-  const grandTotalAmount = filteredHistory.reduce((sum, h) => sum + h.total, 0);
+  const grandTotalQty = filteredHistory.reduce((sum, h) => sum + (h.quantity || 0), 0);
+  const grandTotalAmount = filteredHistory.reduce((sum, h) => sum + (h.total || 0), 0);
 
   const exportReport = () => {
     if (!client) return;
@@ -917,7 +918,7 @@ export default function ClientDetail() {
                                     {isExpanded && groupSales.map((history) => (
                                       <TableRow key={history.id} className="group hover:bg-primary/5 transition-colors">
                                         <TableCell className="text-xs whitespace-nowrap px-6 text-muted-foreground">
-                                          {format(history.date.toDate(), 'HH:mm')}
+                                          {format(safeToDate(history.date), 'HH:mm')}
                                         </TableCell>
                                         <TableCell className="font-medium whitespace-nowrap">
                                           {history.productName}

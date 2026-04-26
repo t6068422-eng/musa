@@ -7,7 +7,7 @@ import { ProductionEntry, SaleEntry, UserProfile } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { History, Factory, ShoppingCart, User as UserIcon, Calendar, ChevronDown, ChevronRight, Folder } from 'lucide-react';
+import { History, Factory, ShoppingCart, User as UserIcon, Calendar, ChevronDown, ChevronRight, Folder, DollarSign } from 'lucide-react';
 import { format, isSameDay } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 import { toPng } from 'html-to-image';
