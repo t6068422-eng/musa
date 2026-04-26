@@ -16,6 +16,7 @@ import {
   Package,
   Trash2,
   Edit2,
+  Folder,
   Image as ImageIcon
 } from 'lucide-react';
 import { 
@@ -98,6 +99,7 @@ export default function ClientDetail() {
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false);
   const [editingSale, setEditingSale] = useState<SaleEntry | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<SaleEntry | null>(null);
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
   const [undoStack, setUndoStack] = useState<any[]>([]);
 
@@ -125,14 +127,17 @@ export default function ClientDetail() {
   const [formData, setFormData] = useState({
     productId: '',
     quantity: 1,
-    price: 0
+    price: 0,
+    unitType: 'piece' as 'ctn' | 'piece',
+    date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
   });
 
   const [editSaleData, setEditSaleData] = useState({
     productId: '',
     quantity: 1,
     price: 0,
-    date: ''
+    date: '',
+    unitType: 'piece' as 'ctn' | 'piece'
   });
 
   useEffect(() => {
@@ -237,7 +242,13 @@ export default function ClientDetail() {
     setSubmitting(true);
     try {
       const batch = writeBatch(db);
-      const now = Timestamp.now();
+      // Construct local date properly from datetime-local string
+      const dateParts = formData.date.split('T');
+      const [year, month, day] = dateParts[0].split('-').map(Number);
+      const [hour, minute] = dateParts[1].split(':').map(Number);
+      const selectedDate = new Date(year, month - 1, day, hour, minute);
+      
+      const saleDate = Timestamp.fromDate(selectedDate);
       const total = formData.quantity * formData.price;
       
       // 1. Create Sale Record
@@ -247,8 +258,9 @@ export default function ClientDetail() {
         productName: selectedProduct.name,
         quantity: Number(formData.quantity),
         price: Number(formData.price),
+        unitType: formData.unitType,
         total: total,
-        date: now,
+        date: saleDate,
         soldBy: user.uid,
         clientId: client.id,
         clientName: client.name
@@ -262,17 +274,31 @@ export default function ClientDetail() {
 
       // 3. Update Client Stats
       const clientRef = doc(db, 'clients', client.id);
-      batch.update(clientRef, {
+      const currentLastPurchase = client.lastPurchaseDate?.toMillis() || 0;
+      const newPurchaseTime = saleDate.toMillis();
+      
+      const updateData: any = {
         totalSpent: (client.totalSpent || 0) + total,
-        totalQuantity: (client.totalQuantity || 0) + Number(formData.quantity),
-        lastPurchaseDate: now
-      });
+        totalQuantity: (client.totalQuantity || 0) + Number(formData.quantity)
+      };
+
+      if (newPurchaseTime > currentLastPurchase) {
+        updateData.lastPurchaseDate = saleDate;
+      }
+
+      batch.update(clientRef, updateData);
 
       await batch.commit();
       
       toast.success('Purchase recorded successfully');
       setIsManualEntryOpen(false);
-      setFormData({ productId: '', quantity: 1, price: 0 });
+      setFormData({ 
+        productId: '', 
+        quantity: 1, 
+        price: 0, 
+        unitType: 'piece',
+        date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
+      });
     } catch (error: any) {
       console.error(error);
       toast.error('Failed to record purchase');
@@ -287,7 +313,8 @@ export default function ClientDetail() {
       productId: sale.productId,
       quantity: sale.quantity,
       price: sale.price,
-      date: format(sale.date.toDate(), "yyyy-MM-dd'T'HH:mm")
+      date: format(sale.date.toDate(), "yyyy-MM-dd'T'HH:mm"),
+      unitType: sale.unitType || 'piece'
     });
   };
 
@@ -305,7 +332,10 @@ export default function ClientDetail() {
       const newQty = Number(editSaleData.quantity);
       const newPrice = Number(editSaleData.price);
       const newTotal = newQty * newPrice;
-      const newDate = Timestamp.fromDate(new Date(editSaleData.date));
+      const dateParts = editSaleData.date.split('T');
+      const [year, month, day] = dateParts[0].split('-').map(Number);
+      const [hour, minute] = dateParts[1].split(':').map(Number);
+      const newDate = Timestamp.fromDate(new Date(year, month - 1, day, hour, minute));
 
       // Save for undo
       setUndoStack(prev => [{
@@ -345,6 +375,7 @@ export default function ClientDetail() {
         productName: newProduct.name,
         quantity: newQty,
         price: newPrice,
+        unitType: editSaleData.unitType,
         total: newTotal,
         date: newDate
       });
@@ -464,19 +495,38 @@ export default function ClientDetail() {
     if (dateRange.start || dateRange.end) {
       const saleDate = h.date.toDate();
       if (dateRange.start) {
-        const startDate = new Date(dateRange.start);
-        startDate.setHours(0, 0, 0, 0);
+        const [y, m, d] = dateRange.start.split('-').map(Number);
+        const startDate = new Date(y, m - 1, d, 0, 0, 0, 0); // Local Midnight
         if (saleDate < startDate) matchesDate = false;
       }
       if (dateRange.end) {
-        const endDate = new Date(dateRange.end);
-        endDate.setHours(23, 59, 59, 999);
+        const [y, m, d] = dateRange.end.split('-').map(Number);
+        const endDate = new Date(y, m - 1, d, 23, 59, 59, 999); // Local End of Day
         if (saleDate > endDate) matchesDate = false;
       }
     }
     
     return matchesSearch && matchesDate;
   });
+
+  const groupedPurchases = filteredHistory.reduce((acc: Record<string, SaleEntry[]>, sale) => {
+    const dateKey = format(sale.date.toDate(), 'yyyy-MM-dd');
+    if (!acc[dateKey]) acc[dateKey] = [];
+    acc[dateKey].push(sale);
+    return acc;
+  }, {});
+
+  const sortedGroupKeys = Object.keys(groupedPurchases).sort((a, b) => b.localeCompare(a));
+
+  const toggleDate = (dateKey: string) => {
+    setExpandedDates(prev => ({
+      ...prev,
+      [dateKey]: !prev[dateKey]
+    }));
+  };
+
+  const grandTotalQty = filteredHistory.reduce((sum, h) => sum + h.quantity, 0);
+  const grandTotalAmount = filteredHistory.reduce((sum, h) => sum + h.total, 0);
 
   const exportReport = () => {
     if (!client) return;
@@ -718,6 +768,16 @@ export default function ClientDetail() {
                         </DialogHeader>
                         <form onSubmit={handleManualSale} className="space-y-4 py-4">
                           <div className="grid gap-2">
+                            <Label htmlFor="date">Purchase Date & Time</Label>
+                            <Input 
+                              id="date" 
+                              type="datetime-local" 
+                              value={formData.date} 
+                              onChange={e => setFormData({ ...formData, date: e.target.value })}
+                              required
+                            />
+                          </div>
+                          <div className="grid gap-2">
                             <Label htmlFor="product">Product</Label>
                             <Select onValueChange={handleProductSelect} value={formData.productId}>
                               <SelectTrigger>
@@ -732,9 +792,24 @@ export default function ClientDetail() {
                               </SelectContent>
                             </Select>
                           </div>
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                             <div className="grid gap-2">
-                              <Label htmlFor="quantity">Quantity</Label>
+                              <Label htmlFor="unitType">Unit</Label>
+                              <Select 
+                                value={formData.unitType} 
+                                onValueChange={(val: 'ctn' | 'piece') => setFormData({ ...formData, unitType: val })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="piece">Piece</SelectItem>
+                                  <SelectItem value="ctn">Carton (Ctn)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="grid gap-2">
+                              <Label htmlFor="quantity">Qty</Label>
                               <Input 
                                 id="quantity" 
                                 type="number" 
@@ -744,8 +819,8 @@ export default function ClientDetail() {
                                 required
                               />
                             </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="price">Unit Price (Rs.)</Label>
+                            <div className="grid gap-2 lg:col-span-1 col-span-2">
+                              <Label htmlFor="price">Price (Rs.)</Label>
                               <Input 
                                 id="price" 
                                 type="number" 
@@ -790,6 +865,7 @@ export default function ClientDetail() {
                             <TableRow className="hover:bg-transparent border-b-2">
                               <TableHead className="bg-background font-bold text-foreground py-4 px-6">Date</TableHead>
                               <TableHead className="bg-background font-bold text-foreground py-4">Product Name</TableHead>
+                              <TableHead className="bg-background font-bold text-foreground py-4">Unit</TableHead>
                               <TableHead className="bg-background font-bold text-foreground py-4">Qty</TableHead>
                               <TableHead className="bg-background font-bold text-foreground py-4">Unit Price</TableHead>
                               <TableHead className="text-right bg-background font-bold text-foreground py-4 pr-6">Total Price</TableHead>
@@ -799,46 +875,124 @@ export default function ClientDetail() {
                           <TableBody>
                             {filteredHistory.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">
+                                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground italic">
                                   {loading ? 'Loading records...' : 'No purchase records found.'}
                                 </TableCell>
                               </TableRow>
                             ) : (
-                              filteredHistory.map((history) => (
-                                <TableRow key={history.id}>
-                                  <TableCell className="text-xs whitespace-nowrap px-6">
-                                    {format(history.date.toDate(), 'MMM dd, yyyy HH:mm')}
-                                  </TableCell>
-                                  <TableCell className="font-medium whitespace-nowrap">
-                                    {history.productName}
-                                  </TableCell>
-                                  <TableCell>{history.quantity}</TableCell>
-                                  <TableCell>Rs. {history.price.toLocaleString()}</TableCell>
-                                  <TableCell className="text-right font-bold pr-6">
-                                    Rs. {history.total.toLocaleString()}
-                                  </TableCell>
-                                  <TableCell className="text-right pr-6">
-                                    <div className="flex justify-end gap-1">
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        className="h-8 w-8 text-primary hover:bg-primary/10"
-                                        onClick={() => handleEditSale(history)}
-                                      >
-                                        <Edit2 className="w-3.5 h-3.5" />
-                                      </Button>
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                        onClick={() => setSaleToDelete(history)}
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              ))
+                              sortedGroupKeys.map((dateKey) => {
+                                const groupSales = groupedPurchases[dateKey];
+                                const dateObj = new Date(dateKey);
+                                const isExpanded = expandedDates[dateKey] ?? (dateKey === sortedGroupKeys[0]);
+                                
+                                return (
+                                  <React.Fragment key={dateKey}>
+                                    {/* Month/Day Header Row (Folder Style) */}
+                                    <TableRow 
+                                      className="bg-muted/40 hover:bg-muted/50 border-y-2 border-primary/10 cursor-pointer transition-colors"
+                                      onClick={() => toggleDate(dateKey)}
+                                    >
+                                      <TableCell colSpan={7} className="py-2.5 px-6">
+                                        <div className="flex items-center gap-2">
+                                          <div className={cn(
+                                            "transition-transform duration-200",
+                                            isExpanded ? "rotate-90" : "rotate-0"
+                                          )}>
+                                            <Folder className="w-3.5 h-3.5 text-primary" />
+                                          </div>
+                                          <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+                                            {format(dateObj, 'MMMM dd, yyyy')}
+                                          </span>
+                                          <Badge variant="outline" className="ml-2 text-[8px] font-bold py-0 h-4 border-primary/20 text-primary bg-primary/5">
+                                            {groupSales.length} {groupSales.length === 1 ? 'Record' : 'Records'}
+                                          </Badge>
+                                          <div className="h-px flex-1 bg-primary/10 ml-2" />
+                                          <span className="text-[9px] font-bold text-muted-foreground">
+                                            {isExpanded ? 'Click to hide' : 'Click to view'}
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                    
+                                    {isExpanded && groupSales.map((history) => (
+                                      <TableRow key={history.id} className="group hover:bg-primary/5 transition-colors">
+                                        <TableCell className="text-xs whitespace-nowrap px-6 text-muted-foreground">
+                                          {format(history.date.toDate(), 'HH:mm')}
+                                        </TableCell>
+                                        <TableCell className="font-medium whitespace-nowrap">
+                                          {history.productName}
+                                        </TableCell>
+                                        <TableCell>
+                                          <span className="text-[10px] font-bold uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                            {history.unitType || 'piece'}
+                                          </span>
+                                        </TableCell>
+                                        <TableCell className="font-bold text-primary">{history.quantity}</TableCell>
+                                        <TableCell>Rs. {history.price.toLocaleString()}</TableCell>
+                                        <TableCell className="text-right font-black pr-6 text-primary">
+                                          Rs. {history.total.toLocaleString()}
+                                        </TableCell>
+                                        <TableCell className="text-right pr-6">
+                                          <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Button 
+                                              variant="ghost" 
+                                              size="icon" 
+                                              className="h-8 w-8 text-primary hover:bg-primary/10"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleEditSale(history);
+                                              }}
+                                            >
+                                              <Edit2 className="w-3.5 h-3.5" />
+                                            </Button>
+                                            <Button 
+                                              variant="ghost" 
+                                              size="icon" 
+                                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSaleToDelete(history);
+                                              }}
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </Button>
+                                          </div>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                    
+                                    {isExpanded && (
+                                      <TableRow className="bg-primary/5 border-t border-primary/10 font-bold">
+                                        <TableCell colSpan={3} className="text-right py-2 uppercase text-[9px] tracking-widest text-muted-foreground px-6 py-3">
+                                          Daily Sub-total
+                                        </TableCell>
+                                        <TableCell className="text-primary">{groupSales.reduce((sum, s) => sum + s.quantity, 0)}</TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell className="text-right text-primary pr-6">
+                                          Rs. {groupSales.reduce((sum, s) => sum + s.total, 0).toLocaleString()}
+                                        </TableCell>
+                                        <TableCell></TableCell>
+                                      </TableRow>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })
+                            )}
+
+                            {filteredHistory.length > 0 && (
+                              <TableRow className="bg-primary/10 font-bold border-t-2 border-green-800 h-14">
+                                <TableCell colSpan={3} className="text-right px-6 border-r border-green-800/30">
+                                  <span className="text-[10px] uppercase tracking-widest text-primary font-black">Grand Total</span>
+                                </TableCell>
+                                <TableCell className="border-r border-green-800/30 text-primary text-base">
+                                  {grandTotalQty.toLocaleString()}
+                                </TableCell>
+                                <TableCell className="border-r border-green-800/30"></TableCell>
+                                <TableCell className="text-right border-r border-green-800/30 text-primary text-base pr-6">
+                                  Rs. {grandTotalAmount.toLocaleString()}
+                                </TableCell>
+                                <TableCell></TableCell>
+                              </TableRow>
                             )}
                           </TableBody>
                     </Table>
@@ -961,9 +1115,24 @@ export default function ClientDetail() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="edit-quantity">Quantity</Label>
+                  <Label htmlFor="edit-unitType">Unit</Label>
+                  <Select 
+                    value={editSaleData.unitType} 
+                    onValueChange={(val: 'ctn' | 'piece') => setEditSaleData({ ...editSaleData, unitType: val })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="piece">Piece</SelectItem>
+                      <SelectItem value="ctn">Carton (Ctn)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-quantity">Qty</Label>
                   <Input 
                     id="edit-quantity" 
                     type="number" 
@@ -973,8 +1142,8 @@ export default function ClientDetail() {
                     required
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-price">Unit Price (Rs.)</Label>
+                <div className="grid gap-2 lg:col-span-1 col-span-2">
+                  <Label htmlFor="edit-price">Price (Rs.)</Label>
                   <Input 
                     id="edit-price" 
                     type="number" 

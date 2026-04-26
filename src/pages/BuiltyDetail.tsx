@@ -369,7 +369,9 @@ export default function BuiltyDetail() {
                      <Table>
                         <TableHeader>
                           <TableRow className="bg-muted/30">
+                            <TableHead className="h-9 text-[10px] font-black uppercase tracking-tighter">Date</TableHead>
                             <TableHead className="h-9 text-[10px] font-black uppercase tracking-tighter">Product Name</TableHead>
+                            <TableHead className="h-9 text-[10px] font-black uppercase tracking-tighter text-center">Unit</TableHead>
                             <TableHead className="h-9 text-[10px] font-black uppercase tracking-tighter text-center">Qty</TableHead>
                             <TableHead className="h-9 text-[10px] font-black uppercase tracking-tighter text-right">Unit Price</TableHead>
                             <TableHead className="h-9 text-[10px] font-black uppercase tracking-tighter text-right">Total</TableHead>
@@ -381,7 +383,15 @@ export default function BuiltyDetail() {
                               .filter(item => item.productName.toLowerCase().includes(itemSearch.toLowerCase()))
                               .map((item, idx) => (
                                 <TableRow key={idx} className="hover:bg-accent/10">
+                                  <TableCell className="py-2.5 text-[10px] text-muted-foreground whitespace-nowrap">
+                                    {format(builty.date.toDate(), 'MMM dd, yyyy HH:mm')}
+                                  </TableCell>
                                   <TableCell className="py-2.5 font-medium">{item.productName}</TableCell>
+                                  <TableCell className="py-2.5 text-center">
+                                    <span className="text-[9px] font-bold uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                      {item.unitType || 'piece'}
+                                    </span>
+                                  </TableCell>
                                   <TableCell className="py-2.5 text-center font-bold text-primary">{item.quantity}</TableCell>
                                   <TableCell className="py-2.5 text-right font-mono text-xs">Rs. {item.price.toLocaleString()}</TableCell>
                                   <TableCell className="py-2.5 text-right font-bold">Rs. {(item.quantity * item.price).toLocaleString()}</TableCell>
@@ -389,8 +399,23 @@ export default function BuiltyDetail() {
                               ))
                           ) : (
                             <TableRow>
-                              <TableCell colSpan={4} className="h-24 text-center text-muted-foreground italic text-xs">
+                              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground italic text-xs">
                                 No itemized products recorded. Showing summary data only.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {builty.items && builty.items.length > 0 && (
+                            <TableRow className="bg-primary/5 font-bold border-t-2 border-primary/20">
+                              <TableCell colSpan={2} className="text-right py-4 uppercase text-[10px] tracking-widest text-muted-foreground">
+                                Grand Total
+                              </TableCell>
+                              <TableCell></TableCell>
+                              <TableCell className="text-center text-primary text-base">
+                                {builty.items.reduce((sum, item) => sum + item.quantity, 0)}
+                              </TableCell>
+                              <TableCell></TableCell>
+                              <TableCell className="text-right text-primary text-base">
+                                Rs. {builty.items.reduce((sum, item) => sum + (item.quantity * item.price), 0).toLocaleString()}
                               </TableCell>
                             </TableRow>
                           )}
@@ -525,37 +550,56 @@ export default function BuiltyDetail() {
               <div className="space-y-3">
                 {editFormData.map((item, index) => (
                   <div key={index} className="grid grid-cols-12 gap-2 items-end p-3 rounded-xl bg-muted/30 border border-border/50 relative">
-                    <div className="col-span-6 space-y-1.5">
+                    <div className="col-span-5 space-y-1.5">
                       <label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Product</label>
-                      <Select 
-                        value={item.productId} 
-                        onValueChange={(val) => {
-                          const prod = products.find(p => p.id === val);
+                      <Input
+                        className="h-9"
+                        placeholder="Search or enter product..."
+                        list={`product-list-${index}`}
+                        value={item.productName}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const prod = products.find(p => p.name === val);
                           const next = [...editFormData];
                           next[index] = { 
                             ...next[index], 
-                            productId: val, 
-                            productName: prod?.name || '',
-                            price: prod?.price || 0
+                            productId: prod?.id || 'manual', 
+                            productName: val,
+                            price: prod?.price || next[index].price
                           };
                           setEditFormData(next);
                         }}
+                      />
+                      <datalist id={`product-list-${index}`}>
+                        {products.map(p => (
+                          <option key={p.id} value={p.name} />
+                        ))}
+                      </datalist>
+                    </div>
+                    <div className="col-span-2 space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Unit</label>
+                      <Select 
+                        value={item.unitType || 'piece'} 
+                        onValueChange={(val: 'ctn' | 'piece') => {
+                          const next = [...editFormData];
+                          next[index].unitType = val;
+                          setEditFormData(next);
+                        }}
                       >
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Select" />
+                        <SelectTrigger className="h-9 text-[10px] px-1">
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {products.map(p => (
-                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                          ))}
+                          <SelectItem value="piece">PCS</SelectItem>
+                          <SelectItem value="ctn">CTN</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="col-span-2 space-y-1.5">
+                    <div className="col-span-1 space-y-1.5">
                       <label className="text-[10px] font-bold uppercase text-muted-foreground ml-1">Qty</label>
                       <Input 
                         type="number" 
-                        className="h-9 text-center font-bold" 
+                        className="h-9 text-center font-bold px-1" 
                         value={item.quantity}
                         onChange={(e) => {
                           const next = [...editFormData];

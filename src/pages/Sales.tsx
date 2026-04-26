@@ -168,7 +168,9 @@ export default function Sales() {
     productId: '',
     clientId: 'none',
     quantity: 0,
-    price: 0
+    price: 0,
+    unitType: 'piece' as 'ctn' | 'piece',
+    manualDate: format(new Date(), "yyyy-MM-dd")
   });
 
   const [logToDelete, setLogToDelete] = useState<SaleEntry | null>(null);
@@ -276,7 +278,12 @@ export default function Sales() {
       
       const newStock = selectedProduct.currentStock - Number(formData.quantity);
       const total = Number(formData.quantity) * Number(formData.price);
-      const now = Timestamp.now();
+      
+      const selectedDate = new Date(formData.manualDate);
+      // Set to current time if the date is today, otherwise use the selected date at noon
+      const isToday = format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+      const timestampDate = isToday ? new Date() : new Date(selectedDate.setHours(12, 0, 0, 0));
+      const firebaseTimestamp = Timestamp.fromDate(timestampDate);
       
       const selectedClient = clients.find(c => c.id === formData.clientId);
 
@@ -286,9 +293,10 @@ export default function Sales() {
         productId: formData.productId,
         productName: selectedProduct.name,
         quantity: Number(formData.quantity),
+        unitType: formData.unitType,
         price: Number(formData.price),
         total: total,
-        date: now,
+        date: firebaseTimestamp,
         soldBy: user.uid
       };
 
@@ -301,7 +309,7 @@ export default function Sales() {
         batch.update(clientRef, {
           totalSpent: (selectedClient.totalSpent || 0) + total,
           totalQuantity: (selectedClient.totalQuantity || 0) + Number(formData.quantity),
-          lastPurchaseDate: now
+          lastPurchaseDate: firebaseTimestamp
         });
       }
 
@@ -314,7 +322,14 @@ export default function Sales() {
 
       toast.success('Sale logged and stock updated');
       setIsAddDialogOpen(false);
-      setFormData({ productId: '', clientId: '', quantity: 0, price: 0 });
+      setFormData({ 
+        productId: '', 
+        clientId: 'none', 
+        quantity: 0, 
+        price: 0, 
+        unitType: 'piece',
+        manualDate: format(new Date(), "yyyy-MM-dd") 
+      });
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || 'Failed to log sale');
@@ -343,6 +358,32 @@ export default function Sales() {
               <DialogDescription>Enter the sales details. Stock will be automatically deducted.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleAddSale} className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="date">Date</Label>
+                  <Input 
+                    id="date" 
+                    type="date" 
+                    value={formData.manualDate} 
+                    onChange={e => setFormData({...formData, manualDate: e.target.value})} 
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="unitType">Unit Type</Label>
+                  <Select 
+                    value={formData.unitType} 
+                    onValueChange={(val: 'ctn' | 'piece') => setFormData({...formData, unitType: val})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Unit Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="piece">Piece (PCS)</SelectItem>
+                      <SelectItem value="ctn">Carton (CTN)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="client">Client (Optional)</Label>
                 <Select onValueChange={(value: string) => setFormData({...formData, clientId: value})} value={formData.clientId}>
@@ -441,62 +482,87 @@ export default function Sales() {
                         <TableHead className="min-w-[120px] bg-background font-bold text-foreground py-4">Date</TableHead>
                         <TableHead className="w-[40px] bg-background"></TableHead>
                         <TableHead className="min-w-[150px] bg-background font-bold text-foreground py-4">Product</TableHead>
+                        <TableHead className="bg-background font-bold text-foreground py-4">Unit</TableHead>
                         <TableHead className="bg-background font-bold text-foreground py-4">Client</TableHead>
                         <TableHead className="bg-background font-bold text-foreground py-4">Qty</TableHead>
+                        <TableHead className="bg-background font-bold text-foreground py-4">Price</TableHead>
                         <TableHead className="bg-background font-bold text-foreground py-4">Total</TableHead>
-                        <TableHead className="text-right bg-background font-bold text-foreground py-4">Action</TableHead>
+                        <TableHead className="text-right bg-background font-bold text-foreground py-4">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                 <TableBody>
                   {salesLogs.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                         No sales recorded yet.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    salesLogs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="text-xs">
-                          {format(log.date.toDate(), 'MMM dd, HH:mm')}
+                    <>
+                      {salesLogs.map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="text-xs">
+                            {format(log.date.toDate(), 'MMM dd, HH:mm')}
+                          </TableCell>
+                          <TableCell>
+                            <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                              {products.find(p => p.id === log.productId)?.imageUrl ? (
+                                <img src={products.find(p => p.id === log.productId)?.imageUrl} alt={log.productName} className="w-full h-full object-cover" />
+                              ) : (
+                                <Package className="w-4 h-4 text-muted-foreground/40" />
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">{log.productName}</TableCell>
+                          <TableCell>
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              {log.unitType || 'piece'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs">{log.clientName || 'Cash'}</TableCell>
+                          <TableCell>{log.quantity}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">Rs. {log.price.toLocaleString()}</TableCell>
+                          <TableCell className="font-bold">Rs. {log.total.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-10 w-10 text-primary hover:bg-primary/10"
+                                onClick={() => handlePrintInvoice(log)}
+                                title="Print Invoice"
+                              >
+                                <Printer className="w-4 h-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="text-destructive hover:bg-destructive/10 h-10 w-10"
+                                onClick={() => setLogToDelete(log)}
+                                title="Delete Sale"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      
+                      {/* Grand Total Row */}
+                      <TableRow className="bg-primary/5 font-bold border-t-2 border-primary/20">
+                        <TableCell colSpan={5} className="text-right py-4 uppercase text-[10px] tracking-widest text-muted-foreground">
+                          Grand Total (Visible)
                         </TableCell>
-                        <TableCell>
-                          <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
-                            {products.find(p => p.id === log.productId)?.imageUrl ? (
-                              <img src={products.find(p => p.id === log.productId)?.imageUrl} alt={log.productName} className="w-full h-full object-cover" />
-                            ) : (
-                              <Package className="w-4 h-4 text-muted-foreground/40" />
-                            )}
-                          </div>
+                        <TableCell className="text-primary tabular-nums">
+                          {salesLogs.reduce((sum, log) => sum + log.quantity, 0)}
                         </TableCell>
-                        <TableCell className="font-medium">{log.productName}</TableCell>
-                        <TableCell className="text-xs">{log.clientName || 'Cash'}</TableCell>
-                        <TableCell>{log.quantity}</TableCell>
-                        <TableCell className="font-bold">Rs. {log.total.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-10 w-10"
-                              onClick={() => handlePrintInvoice(log)}
-                              title="Print Invoice"
-                            >
-                              <Printer className="w-4 h-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="text-destructive hover:bg-destructive/10 h-10 w-10"
-                              onClick={() => setLogToDelete(log)}
-                              title="Delete Sale"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
+                        <TableCell></TableCell>
+                        <TableCell className="text-primary tabular-nums text-lg">
+                          Rs. {salesLogs.reduce((sum, log) => sum + log.total, 0).toLocaleString()}
                         </TableCell>
+                        <TableCell></TableCell>
                       </TableRow>
-                    ))
+                    </>
                   )}
                 </TableBody>
               </Table>

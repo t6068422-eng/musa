@@ -99,7 +99,9 @@ export default function Production() {
   const [formData, setFormData] = useState({
     productId: '',
     quantity: 0,
-    qtySold: 0
+    qtySold: 0,
+    unitType: 'piece' as 'ctn' | 'piece',
+    manualDate: format(new Date(), "yyyy-MM-dd")
   });
 
   const [logToDelete, setLogToDelete] = useState<ProductionEntry | null>(null);
@@ -186,7 +188,11 @@ export default function Production() {
         return toast.error("Insufficient stock for the requested sale!");
       }
 
-      const now = Timestamp.now();
+      const selectedDate = new Date(formData.manualDate);
+      // Set to current time if the date is today, otherwise use the selected date at noon
+      const isToday = format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+      const timestampDate = isToday ? new Date() : new Date(selectedDate.setHours(12, 0, 0, 0));
+      const firebaseTimestamp = Timestamp.fromDate(timestampDate);
 
       // 1. Log the production if any
       if (formData.quantity > 0) {
@@ -195,7 +201,8 @@ export default function Production() {
           productId: formData.productId,
           productName: selectedProduct.name,
           quantity: Number(formData.quantity),
-          date: now,
+          unitType: formData.unitType,
+          date: firebaseTimestamp,
           addedBy: user.uid
         });
       }
@@ -207,9 +214,10 @@ export default function Production() {
           productId: formData.productId,
           productName: selectedProduct.name,
           quantity: Number(formData.qtySold),
+          unitType: formData.unitType,
           price: 0,
           total: 0,
-          date: now,
+          date: firebaseTimestamp,
           soldBy: user.uid
         });
       }
@@ -221,7 +229,13 @@ export default function Production() {
 
       toast.success('Inventory updated successfully');
       setIsAddDialogOpen(false);
-      setFormData({ productId: '', quantity: 0, qtySold: 0 });
+      setFormData({ 
+        productId: '', 
+        quantity: 0, 
+        qtySold: 0, 
+        unitType: 'piece',
+        manualDate: format(new Date(), "yyyy-MM-dd") 
+      });
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || 'Failed to update inventory');
@@ -250,6 +264,32 @@ export default function Production() {
               <DialogDescription>Select a product and enter the produced and sold quantities.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleAddProduction} className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="date">Date</Label>
+                  <Input 
+                    id="date" 
+                    type="date" 
+                    value={formData.manualDate} 
+                    onChange={e => setFormData({...formData, manualDate: e.target.value})} 
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="unitType">Unit Type</Label>
+                  <Select 
+                    value={formData.unitType} 
+                    onValueChange={(val: 'ctn' | 'piece') => setFormData({...formData, unitType: val})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Unit Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="piece">Piece (PCS)</SelectItem>
+                      <SelectItem value="ctn">Carton (CTN)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="product">Product</Label>
                 <Select onValueChange={(value: string) => setFormData({...formData, productId: value})}>
@@ -336,46 +376,64 @@ export default function Production() {
                         <TableHead className="min-w-[120px] bg-background font-bold text-foreground py-4">Date</TableHead>
                         <TableHead className="w-[40px] bg-background"></TableHead>
                         <TableHead className="min-w-[150px] bg-background font-bold text-foreground py-4">Product</TableHead>
-                        <TableHead className="bg-background font-bold text-foreground py-4">Quantity</TableHead>
-                        <TableHead className="text-right bg-background font-bold text-foreground py-4">Action</TableHead>
+                        <TableHead className="bg-background font-bold text-foreground py-4">Unit</TableHead>
+                        <TableHead className="bg-background font-bold text-foreground py-4 text-right">Quantity</TableHead>
+                        <TableHead className="text-right bg-background font-bold text-foreground py-4">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                 <TableBody>
                   {productionLogs.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                         No production logs yet.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    productionLogs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="text-xs">
-                          {format(log.date.toDate(), 'MMM dd, HH:mm')}
+                    <>
+                      {productionLogs.map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="text-xs">
+                            {format(log.date.toDate(), 'MMM dd, HH:mm')}
+                          </TableCell>
+                          <TableCell>
+                            <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                              {products.find(p => p.id === log.productId)?.imageUrl ? (
+                                <img src={products.find(p => p.id === log.productId)?.imageUrl} alt={log.productName} className="w-full h-full object-cover" />
+                              ) : (
+                                <Package className="w-4 h-4 text-muted-foreground/40" />
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">{log.productName}</TableCell>
+                          <TableCell>
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              {log.unitType || 'piece'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right font-bold">{log.quantity}</TableCell>
+                          <TableCell className="text-right">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-destructive hover:bg-destructive/10 h-10 w-10"
+                              onClick={() => setLogToDelete(log)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {/* Grand Total Row */}
+                      <TableRow className="bg-primary/5 font-bold border-t-2 border-primary/20">
+                        <TableCell colSpan={4} className="text-right py-4 uppercase text-[10px] tracking-widest text-muted-foreground">
+                          Grand Total (Visible)
                         </TableCell>
-                        <TableCell>
-                          <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
-                            {products.find(p => p.id === log.productId)?.imageUrl ? (
-                              <img src={products.find(p => p.id === log.productId)?.imageUrl} alt={log.productName} className="w-full h-full object-cover" />
-                            ) : (
-                              <Package className="w-4 h-4 text-muted-foreground/40" />
-                            )}
-                          </div>
+                        <TableCell className="text-primary tabular-nums text-right text-lg">
+                          {productionLogs.reduce((sum, log) => sum + log.quantity, 0)}
                         </TableCell>
-                        <TableCell className="font-medium">{log.productName}</TableCell>
-                        <TableCell>{log.quantity}</TableCell>
-                        <TableCell className="text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="text-destructive hover:bg-destructive/10 h-10 w-10"
-                            onClick={() => setLogToDelete(log)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
+                        <TableCell></TableCell>
                       </TableRow>
-                    ))
+                    </>
                   )}
                 </TableBody>
               </Table>

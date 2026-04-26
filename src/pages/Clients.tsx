@@ -119,6 +119,7 @@ export default function Clients() {
     phone: '',
     email: '',
     address: '',
+    branchName: '',
     creditBalance: 0
   });
 
@@ -155,6 +156,7 @@ export default function Clients() {
           phone: editingClient.phone,
           email: editingClient.email || '',
           address: editingClient.address || '',
+          branchName: editingClient.branchName || '',
           creditBalance: editingClient.creditBalance || 0
         };
         
@@ -180,7 +182,7 @@ export default function Clients() {
       }
       setIsAddDialogOpen(false);
       setEditingClient(null);
-      setFormData({ name: '', phone: '', email: '', address: '', creditBalance: 0 });
+      setFormData({ name: '', phone: '', email: '', address: '', branchName: '', creditBalance: 0 });
     } catch (error: any) {
       console.error(error);
       toast.error('Failed to save client');
@@ -320,7 +322,7 @@ export default function Clients() {
             setIsAddDialogOpen(open);
             if (!open) {
               setEditingClient(null);
-              setFormData({ name: '', phone: '', email: '', address: '', creditBalance: 0 });
+              setFormData({ name: '', phone: '', email: '', address: '', branchName: '', creditBalance: 0 });
             }
           }}>
             <DialogTrigger render={<Button className="gap-2 bg-primary text-primary-foreground" />}>
@@ -371,6 +373,15 @@ export default function Clients() {
                   value={formData.address} 
                   onChange={e => setFormData({...formData, address: e.target.value})} 
                   placeholder="Street, City, Country"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="branchName">Branch Name</Label>
+                <Input 
+                  id="branchName" 
+                  value={formData.branchName} 
+                  onChange={e => setFormData({...formData, branchName: e.target.value})} 
+                  placeholder="e.g. Downtown Branch"
                 />
               </div>
               <div className="grid gap-2">
@@ -466,6 +477,11 @@ export default function Clients() {
                     <TableRow key={client.id} className="cursor-pointer hover:bg-accent/50" onClick={() => navigate(`/clients/${client.id}`)}>
                       <TableCell>
                         <div className="font-medium">{client.name}</div>
+                        {client.branchName && (
+                          <div className="text-[10px] font-bold text-primary uppercase tracking-tight">
+                            {client.branchName}
+                          </div>
+                        )}
                         <div className="text-xs text-muted-foreground truncate max-w-[180px]">{client.address || 'No address'}</div>
                       </TableCell>
                       <TableCell>
@@ -514,6 +530,7 @@ export default function Clients() {
                                 phone: client.phone,
                                 email: client.email || '',
                                 address: client.address || '',
+                                branchName: client.branchName || '',
                                 creditBalance: client.creditBalance || 0
                               });
                               setIsAddDialogOpen(true);

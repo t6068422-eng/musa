@@ -696,33 +696,52 @@ export default function Builties() {
                         <div className="space-y-3">
                           {formData.items.map((item, index) => (
                             <div key={index} className="grid grid-cols-12 gap-2 items-end p-3 rounded-lg bg-accent/30 border border-border/50">
-                              <div className="col-span-5 space-y-1">
+                              <div className="col-span-4 space-y-1">
                                 <Label className="text-[10px] uppercase text-muted-foreground">Product</Label>
-                                <Select 
-                                  value={item.productId} 
-                                  onValueChange={(val) => {
-                                    const prod = products.find(p => p.id === val);
+                                <Input
+                                  className="h-8 text-xs"
+                                  placeholder="Product..."
+                                  list={`builty-product-list-${index}`}
+                                  value={item.productName}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const prod = products.find(p => p.name === val);
                                     const nextItems = [...formData.items];
                                     nextItems[index] = { 
                                       ...nextItems[index], 
-                                      productId: val, 
-                                      productName: prod?.name || '',
-                                      price: prod?.price || 0
+                                      productId: prod?.id || 'manual', 
+                                      productName: val,
+                                      price: prod?.price || nextItems[index].price
                                     };
                                     setFormData({ ...formData, items: nextItems });
                                   }}
+                                />
+                                <datalist id={`builty-product-list-${index}`}>
+                                  {products.map(p => (
+                                    <option key={p.id} value={p.name} />
+                                  ))}
+                                </datalist>
+                              </div>
+                              <div className="col-span-2 space-y-1">
+                                <Label className="text-[10px] uppercase text-muted-foreground">Unit</Label>
+                                <Select 
+                                  value={item.unitType || 'piece'} 
+                                  onValueChange={(val: 'ctn' | 'piece') => {
+                                    const nextItems = [...formData.items];
+                                    nextItems[index].unitType = val;
+                                    setFormData({ ...formData, items: nextItems });
+                                  }}
                                 >
-                                  <SelectTrigger className="h-8 text-xs">
-                                    <SelectValue placeholder="Select" />
+                                  <SelectTrigger className="h-8 text-[10px] p-1">
+                                    <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {products.map(p => (
-                                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                    ))}
+                                    <SelectItem value="piece">PCS</SelectItem>
+                                    <SelectItem value="ctn">CTN</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
-                              <div className="col-span-3 space-y-1">
+                              <div className="col-span-2 space-y-1">
                                 <Label className="text-[10px] uppercase text-muted-foreground">Qty</Label>
                                 <Input 
                                   type="number" 

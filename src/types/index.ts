@@ -29,6 +29,7 @@ export interface Client {
   phone: string;
   email?: string;
   address?: string;
+  branchName?: string;
   creditBalance?: number;
   createdAt: Timestamp;
   lastPurchaseDate?: Timestamp;
@@ -41,6 +42,7 @@ export interface BuiltyItem {
   productName: string;
   quantity: number;
   price: number;
+  unitType?: 'ctn' | 'piece';
 }
 
 export interface Builty {
@@ -70,6 +72,7 @@ export interface StockEntry {
   production: number;
   qtySold: number;
   price: number;
+  unitType?: 'ctn' | 'piece';
   preparedStock: number;
   customFields: Record<string, any>;
 }
@@ -88,6 +91,7 @@ export interface ProductionEntry {
   productId: string;
   productName: string;
   quantity: number;
+  unitType?: 'ctn' | 'piece';
   date: Timestamp;
   addedBy: string;
 }
@@ -97,6 +101,7 @@ export interface SaleEntry {
   productId: string;
   productName: string;
   quantity: number;
+  unitType?: 'ctn' | 'piece';
   price: number;
   total: number;
   date: Timestamp;

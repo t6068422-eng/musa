@@ -263,6 +263,7 @@ export default function SavedData() {
                                 <TableRow className="bg-accent/50">
                                   <TableHead className="sticky left-0 bg-accent/50 z-10 w-[40px]"></TableHead>
                                   <TableHead className="sticky left-0 bg-accent/50 z-10">Product</TableHead>
+                                  <TableHead className="text-center font-bold">Unit</TableHead>
                                   <TableHead className="text-center">Prepared</TableHead>
                                   <TableHead className="text-center">Production</TableHead>
                                   <TableHead className="text-center">Sold</TableHead>
@@ -292,6 +293,11 @@ export default function SavedData() {
                                          </div>
                                        </TableCell>
                                        <TableCell className="font-medium sticky left-12 bg-background/80 backdrop-blur-sm z-10">{entry.productName}</TableCell>
+                                       <TableCell className="text-center">
+                                         <span className="text-[10px] font-bold uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                           {entry.unitType || 'piece'}
+                                         </span>
+                                       </TableCell>
                                        <TableCell className="text-center">{prepared}</TableCell>
                                        <TableCell className="text-center">{entry.production || 0}</TableCell>
                                        <TableCell className="text-center">{sold}</TableCell>
@@ -304,6 +310,33 @@ export default function SavedData() {
                                      </TableRow>
                                     );
                                    })}
+                                   {record.entries.length > 0 && (
+                                     <TableRow className="bg-primary/5 font-bold border-t-2 border-primary/20">
+                                       <TableCell colSpan={2} className="text-right py-4 uppercase text-[10px] tracking-widest text-muted-foreground px-4">
+                                         Grand Total
+                                       </TableCell>
+                                       <TableCell className="text-center">-</TableCell>
+                                       <TableCell className="text-center text-primary font-black">
+                                         {record.entries.reduce((sum, e) => sum + (e?.preparedStock || 0), 0)}
+                                       </TableCell>
+                                       <TableCell className="text-center text-primary font-black">
+                                         {record.entries.reduce((sum, e) => sum + (e?.production || 0), 0)}
+                                       </TableCell>
+                                       <TableCell className="text-center text-primary font-black">
+                                         {record.entries.reduce((sum, e) => sum + (e?.qtySold || 0), 0)}
+                                       </TableCell>
+                                       <TableCell className="text-center">-</TableCell>
+                                       <TableCell className="text-center text-primary font-black text-base">
+                                         Rs. {record.entries.reduce((sum, e) => sum + ((e?.qtySold || 0) * (e?.price || 0)), 0).toLocaleString()}
+                                       </TableCell>
+                                       <TableCell className="text-center font-black text-base">
+                                         {record.entries.reduce((sum, e) => sum + ((e?.preparedStock || 0) - (e?.qtySold || 0)), 0)}
+                                       </TableCell>
+                                       {record.customColumns.map((col, i) => (
+                                         <TableCell key={i}></TableCell>
+                                       ))}
+                                     </TableRow>
+                                   )}
                               </TableBody>
                             </Table>
                           </div>

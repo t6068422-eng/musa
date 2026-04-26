@@ -49,6 +49,13 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -90,6 +97,7 @@ export default function StockControl() {
   const [quickEntryQtySold, setQuickEntryQtySold] = useState('');
   const [showDetailedStock, setShowDetailedStock] = useState(true);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
+  const [manualDate, setManualDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const { user, quotaExceeded, setQuotaExceeded } = useAuth();
   const isLocalChange = useRef(false);
   const productsRef = useRef<Product[]>([]);
@@ -407,8 +415,9 @@ export default function StockControl() {
     toast.success('Fields cleared successfully (Syncing with cloud in background)');
   };
 
-  const handleEntryChange = (productId: string, field: 'production' | 'qtySold' | 'preparedStock' | 'price', value: string) => {
-    const numValue = value === '' ? 0 : Number(value);
+  const handleEntryChange = (productId: string, field: 'production' | 'qtySold' | 'preparedStock' | 'price' | 'unitType', value: any) => {
+    const isNumField = field !== 'unitType';
+    const numValue = isNumField ? (value === '' ? 0 : Number(value)) : value;
     const product = products.find(p => p.id === productId);
     const productName = product?.name || 'Product';
     
@@ -422,16 +431,16 @@ export default function StockControl() {
         qtySold: 0,
         price: product?.price || 0,
         preparedStock: product?.currentStock || 0,
+        unitType: 'piece',
         customFields: {}
       };
       let newPreparedStock = currentEntry.preparedStock;
 
-      // If production changes, update preparedStock proportionally (bi-directional)
       if (field === 'production') {
-        const diff = numValue - currentEntry.production;
+        const diff = Number(numValue) - currentEntry.production;
         newPreparedStock = Math.max(0, newPreparedStock + diff);
       } else if (field === 'preparedStock') {
-        newPreparedStock = numValue;
+        newPreparedStock = Number(numValue);
       }
 
       return {
@@ -647,8 +656,12 @@ export default function StockControl() {
     
     try {
       const batch = writeBatch(db);
-      const now = Timestamp.now();
-      const dayId = format(new Date(), 'yyyy-MM-dd');
+      const selectedDate = new Date(manualDate);
+      // Set to current time if the date is today, otherwise use the selected date at noon
+      const isToday = format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+      const timestampDate = isToday ? new Date() : new Date(selectedDate.setHours(12, 0, 0, 0));
+      const now = Timestamp.fromDate(timestampDate);
+      const dayId = format(selectedDate, 'yyyy-MM-dd');
       const productIds = Object.keys(entries);
       let haveMeaningfulCloudChanges = false;
       
@@ -785,7 +798,7 @@ export default function StockControl() {
     const header = `Product,Prepared Stock,Production,Qty Sold,Price,Revenue,New Prepared Stock,Status${customHeaders}\n`;
     
     const rows = products.map(p => {
-      const entry = entries[p.id] || { production: 0, qtySold: 0, price: 0, preparedStock: p.currentStock, customFields: {} };
+      const entry = entries[p.id] || { production: 0, qtySold: 0, price: 0, preparedStock: p.currentStock, unitType: 'piece', customFields: {} };
       const newStock = entry.preparedStock - entry.qtySold;
       const revenue = entry.qtySold * entry.price;
       const status = newStock <= p.minStockLevel ? "Low Stock" : "In Stock";
@@ -822,8 +835,16 @@ export default function StockControl() {
           STOCK CONTROL SHEET
         </div>
         <div className="grid grid-cols-2 bg-[#6aa84f] text-black font-bold text-sm md:text-base">
-          <div className="border-r-2 border-green-800 py-1 text-center">DATE</div>
-          <div className="py-1 text-center">{format(new Date(), 'dd-MMM-yy')}</div>
+          <div className="border-r-2 border-green-800 py-1 text-center flex items-center justify-center gap-2">
+            DATE
+            <Input 
+              type="date" 
+              className="w-auto h-6 text-xs p-1 border-green-800 bg-white/50" 
+              value={manualDate}
+              onChange={(e) => setManualDate(e.target.value)}
+            />
+          </div>
+          <div className="py-1 text-center">{format(new Date(manualDate), 'dd-MMM-yy')}</div>
         </div>
       </div>
 
@@ -984,6 +1005,7 @@ export default function StockControl() {
                   {showDetailedStock && (
                     <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">Stock</TableHead>
                   )}
+                  <TableHead className="text-black font-bold text-center border-r border-green-800 w-[100px]">Unit</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">Prod.</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">Sold</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800 w-[100px]">Price</TableHead>
@@ -1048,6 +1070,7 @@ export default function StockControl() {
                       qtySold: 0, 
                       price: product.price || 0, 
                       preparedStock: product.currentStock, 
+                      unitType: 'piece' as 'ctn' | 'piece',
                       customFields: product.customFields || {} 
                     };
                     const newStock = entry.preparedStock - entry.qtySold;
@@ -1083,6 +1106,20 @@ export default function StockControl() {
                             />
                           </TableCell>
                         )}
+                        <TableCell className="text-center border-r border-green-800/30 p-1">
+                          <Select 
+                            value={entry.unitType || 'piece'} 
+                            onValueChange={(val: 'ctn' | 'piece') => handleEntryChange(product.id, 'unitType', val)}
+                          >
+                            <SelectTrigger className="h-8 border-none bg-transparent focus:ring-0 text-[10px] p-1 font-bold uppercase text-center justify-center">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="piece">PCS</SelectItem>
+                              <SelectItem value="ctn">CTN</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
                         <TableCell className="text-center border-r border-green-800/30 p-1">
                           <Input 
                             type="text"
@@ -1140,6 +1177,44 @@ export default function StockControl() {
                     );
                   })
                 )}
+
+                {/* Grand Total Row */}
+                {products.length > 0 && (
+                  <TableRow className="bg-green-800 text-white font-bold h-12">
+                    <TableCell className="sticky left-0 bg-green-800 z-10 border-r border-white/20 text-right px-4 uppercase text-[10px] tracking-widest">
+                      Grand Total
+                    </TableCell>
+                    <TableCell className="text-center border-r border-white/20">
+                      {products.reduce((sum, p) => sum + (entries[p.id]?.preparedStock || p.currentStock || 0), 0)}
+                    </TableCell>
+                    <TableCell className="text-center border-r border-white/20">
+                      -
+                    </TableCell>
+                    <TableCell className="text-center border-r border-white/20">
+                      {products.reduce((sum, p) => sum + (entries[p.id]?.production || 0), 0)}
+                    </TableCell>
+                    <TableCell className="text-center border-r border-white/20">
+                      {products.reduce((sum, p) => sum + (entries[p.id]?.qtySold || 0), 0)}
+                    </TableCell>
+                    <TableCell className="text-center border-r border-white/20">
+                      -
+                    </TableCell>
+                    <TableCell className="text-center border-r border-white/20 text-yellow-400">
+                      Rs. {products.reduce((sum, p) => sum + ((entries[p.id]?.qtySold || 0) * (entries[p.id]?.price || 0)), 0).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-center border-r border-white/20">
+                      {products.reduce((sum, p) => {
+                        const entry = entries[p.id] || { preparedStock: p.currentStock, production: 0, qtySold: 0 };
+                        return sum + ((entry.preparedStock || p.currentStock) + (entry.production || 0) - (entry.qtySold || 0));
+                      }, 0)}
+                    </TableCell>
+                    <TableCell className="text-center border-r border-white/20"></TableCell>
+                    {customColumns.map(col => (
+                      <TableCell key={col} className="border-r border-white/20"></TableCell>
+                    ))}
+                  </TableRow>
+                )}
+
                 {/* Quick Add Row */}
                 <TableRow className="bg-accent/5 border-t-2 border-green-800/20">
                   <TableCell className="p-1 border-r border-green-800/30 sticky left-0 bg-background/80 backdrop-blur-sm z-10">
@@ -1157,6 +1232,26 @@ export default function StockControl() {
                     </div>
                   </TableCell>
                   <TableCell colSpan={(showDetailedStock ? 1 : 0) + 6 + customColumns.length} className="bg-accent/5" />
+                </TableRow>
+
+                {/* Grand Total Row */}
+                <TableRow className="bg-primary/10 font-bold border-t-2 border-green-800 h-14">
+                  <TableCell className="text-right px-4 border-r border-green-800/30 sticky left-0 bg-primary/10 z-10">
+                    <span className="text-[10px] uppercase tracking-widest text-primary font-black">Grand Total</span>
+                  </TableCell>
+                  {showDetailedStock && <TableCell className="border-r border-green-800/30"></TableCell>}
+                  <TableCell className="border-r border-green-800/30"></TableCell>
+                  <TableCell className="text-center border-r border-green-800/30 text-primary">
+                    {filteredProducts.reduce((sum, p) => sum + (entries[p.id]?.production || 0), 0)}
+                  </TableCell>
+                  <TableCell className="text-center border-r border-green-800/30 text-primary">
+                    {filteredProducts.reduce((sum, p) => sum + (entries[p.id]?.qtySold || 0), 0)}
+                  </TableCell>
+                  <TableCell className="border-r border-green-800/30"></TableCell>
+                  <TableCell className="text-center border-r border-green-800/30 text-primary text-base">
+                    Rs. {filteredProducts.reduce((sum, p) => sum + ((entries[p.id]?.qtySold || 0) * (entries[p.id]?.price || 0)), 0).toLocaleString()}
+                  </TableCell>
+                  <TableCell colSpan={2 + customColumns.length}></TableCell>
                 </TableRow>
               </TableBody>
             </Table>
