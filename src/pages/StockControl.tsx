@@ -1002,15 +1002,15 @@ export default function StockControl() {
               <TableHeader>
                 <TableRow className="bg-[#93c47d] hover:bg-[#93c47d] border-b-2 border-green-800">
                   <TableHead className="text-black font-bold text-center border-r border-green-800 min-w-[150px] sticky left-0 bg-[#93c47d] z-10">Product</TableHead>
+                  <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">New</TableHead>
                   {showDetailedStock && (
-                    <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">Stock</TableHead>
+                    <TableHead className="text-black font-bold text-center border-r border-green-800 w-[100px]">Stock</TableHead>
                   )}
                   <TableHead className="text-black font-bold text-center border-r border-green-800 w-[100px]">Unit</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">Prod.</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">Sold</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800 w-[100px]">Price</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800 w-[100px]">Rev.</TableHead>
-                  <TableHead className="text-black font-bold text-center border-r border-green-800 w-[80px]">New</TableHead>
                   <TableHead className="text-black font-bold text-center border-r border-green-800 w-[100px]">Status</TableHead>
                   {customColumns.map(column => (
                     <TableHead key={column} className="text-black font-bold text-center border-r border-green-800 min-w-[120px] relative group">
@@ -1079,7 +1079,7 @@ export default function StockControl() {
                     
                     return (
                       <TableRow key={product.id} className="hover:bg-accent/5 border-b border-green-800/30">
-                        <TableCell className="font-bold text-left border-r border-green-800/30 p-1 sticky left-0 bg-background/80 backdrop-blur-sm z-10">
+                        <TableCell className="font-bold text-left border-r border-green-800/30 p-1 sticky left-0 bg-background/80 backdrop-blur-sm z-10 min-w-[150px]">
                           <div className="flex items-center gap-2 px-2">
                             <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
                               {product.imageUrl ? (
@@ -1094,6 +1094,9 @@ export default function StockControl() {
                               onChange={(e) => handleProductNameChange(product.id, e.target.value)}
                             />
                           </div>
+                        </TableCell>
+                        <TableCell className={`text-center border-r border-green-800/30 font-bold text-sm ${newStock < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                          {newStock}
                         </TableCell>
                         {showDetailedStock && (
                           <TableCell className="text-center border-r border-green-800/30 p-1 bg-blue-50/30">
@@ -1153,9 +1156,6 @@ export default function StockControl() {
                         <TableCell className="text-center border-r border-green-800/30 font-bold text-blue-600 text-sm">
                           Rs. {revenue.toLocaleString()}
                         </TableCell>
-                        <TableCell className={`text-center border-r border-green-800/30 font-bold text-sm ${newStock < 0 ? 'text-red-600' : 'text-green-700'}`}>
-                          {newStock}
-                        </TableCell>
                         <TableCell className="text-center border-r border-green-800/30">
                           {isLowStock ? (
                             <Badge variant="destructive" className="text-[10px] h-5 px-1">LOW</Badge>
@@ -1181,8 +1181,14 @@ export default function StockControl() {
                 {/* Grand Total Row */}
                 {products.length > 0 && (
                   <TableRow className="bg-green-800 text-white font-bold h-12">
-                    <TableCell className="sticky left-0 bg-green-800 z-10 border-r border-white/20 text-right px-4 uppercase text-[10px] tracking-widest">
+                    <TableCell className="sticky left-0 bg-green-800 z-10 border-r border-white/20 text-right px-4 uppercase text-[10px] tracking-widest min-w-[150px]">
                       Grand Total
+                    </TableCell>
+                    <TableCell className="text-center border-r border-white/20">
+                      {products.reduce((sum, p) => {
+                        const entry = entries[p.id] || { preparedStock: p.currentStock, production: 0, qtySold: 0 };
+                        return sum + ((entry.preparedStock || p.currentStock) + (entry.production || 0) - (entry.qtySold || 0));
+                      }, 0)}
                     </TableCell>
                     <TableCell className="text-center border-r border-white/20">
                       {products.reduce((sum, p) => sum + (entries[p.id]?.preparedStock || p.currentStock || 0), 0)}
@@ -1202,12 +1208,6 @@ export default function StockControl() {
                     <TableCell className="text-center border-r border-white/20 text-yellow-400">
                       Rs. {products.reduce((sum, p) => sum + ((entries[p.id]?.qtySold || 0) * (entries[p.id]?.price || 0)), 0).toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-center border-r border-white/20">
-                      {products.reduce((sum, p) => {
-                        const entry = entries[p.id] || { preparedStock: p.currentStock, production: 0, qtySold: 0 };
-                        return sum + ((entry.preparedStock || p.currentStock) + (entry.production || 0) - (entry.qtySold || 0));
-                      }, 0)}
-                    </TableCell>
                     <TableCell className="text-center border-r border-white/20"></TableCell>
                     {customColumns.map(col => (
                       <TableCell key={col} className="border-r border-white/20"></TableCell>
@@ -1217,7 +1217,7 @@ export default function StockControl() {
 
                 {/* Quick Add Row */}
                 <TableRow className="bg-accent/5 border-t-2 border-green-800/20">
-                  <TableCell className="p-1 border-r border-green-800/30 sticky left-0 bg-background/80 backdrop-blur-sm z-10">
+                  <TableCell className="p-1 border-r border-green-800/30 sticky left-0 bg-background/80 backdrop-blur-sm z-10 min-w-[150px]">
                     <div className="flex gap-2 items-center px-2">
                       <Input 
                         placeholder="Quick add..." 
@@ -1231,13 +1231,20 @@ export default function StockControl() {
                       </Button>
                     </div>
                   </TableCell>
+                  <TableCell className="border-r border-green-800/30 bg-accent/5" />
                   <TableCell colSpan={(showDetailedStock ? 1 : 0) + 6 + customColumns.length} className="bg-accent/5" />
                 </TableRow>
 
                 {/* Grand Total Row */}
                 <TableRow className="bg-primary/10 font-bold border-t-2 border-green-800 h-14">
-                  <TableCell className="text-right px-4 border-r border-green-800/30 sticky left-0 bg-primary/10 z-10">
+                  <TableCell className="text-right px-4 border-r border-green-800/30 sticky left-0 bg-primary/10 z-10 min-w-[150px]">
                     <span className="text-[10px] uppercase tracking-widest text-primary font-black">Grand Total</span>
+                  </TableCell>
+                  <TableCell className="border-r border-green-800/30 text-center text-primary">
+                    {filteredProducts.reduce((sum, p) => {
+                      const entry = entries[p.id] || { preparedStock: p.currentStock, production: 0, qtySold: 0 };
+                      return sum + ((entry.preparedStock || p.currentStock) + (entry.production || 0) - (entry.qtySold || 0));
+                    }, 0)}
                   </TableCell>
                   {showDetailedStock && <TableCell className="border-r border-green-800/30"></TableCell>}
                   <TableCell className="border-r border-green-800/30"></TableCell>
@@ -1251,7 +1258,7 @@ export default function StockControl() {
                   <TableCell className="text-center border-r border-green-800/30 text-primary text-base">
                     Rs. {filteredProducts.reduce((sum, p) => sum + ((entries[p.id]?.qtySold || 0) * (entries[p.id]?.price || 0)), 0).toLocaleString()}
                   </TableCell>
-                  <TableCell colSpan={2 + customColumns.length}></TableCell>
+                  <TableCell colSpan={1 + customColumns.length}></TableCell>
                 </TableRow>
               </TableBody>
             </Table>

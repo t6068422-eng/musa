@@ -7,6 +7,7 @@ import {
   onSnapshot, 
   doc, 
   deleteDoc,
+  writeBatch,
   Timestamp
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -133,14 +134,32 @@ export default function SavedData() {
 
   const handleDelete = async (id: string, savedBy: string) => {
     if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
-    if (!confirm('Are you sure you want to delete this record?')) return;
+    if (!confirm('Are you sure you want to delete this record? This will also remove the data from all reports for this day.')) return;
 
     try {
-      await deleteDoc(doc(db, 'stockControlHistory', id));
-      toast.success('Record deleted successfully');
+      const batch = writeBatch(db);
+      const dayId = id; // The ID of the record is the day yyyy-MM-dd
+      
+      // 1. Delete associated production entries for this day
+      // StockControl saves production with ID: ${dayId}_${productId}
+      const record = history.find(h => h.id === id);
+      if (record) {
+        record.entries.forEach(entry => {
+          const prodRef = doc(db, 'production', `${dayId}_${entry.productId}`);
+          const saleRef = doc(db, 'sales', `${dayId}_${entry.productId}`);
+          batch.delete(prodRef);
+          batch.delete(saleRef);
+        });
+      }
+
+      // 2. Delete the history record itself
+      batch.delete(doc(db, 'stockControlHistory', id));
+      
+      await batch.commit();
+      toast.success('Record and associated report data deleted successfully');
     } catch (error) {
       console.error(error);
-      toast.error('Failed to delete record');
+      toast.error('Failed to delete record and associated data');
     }
   };
 
