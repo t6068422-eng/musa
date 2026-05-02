@@ -18,7 +18,8 @@ import {
   orderBy,
   limit,
   writeBatch,
-  doc
+  doc,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
@@ -240,10 +241,30 @@ export default function Sales() {
         }
       }
       
+      // Update Stock Control History if it exists for this day (to keep reports in sync)
+      const saleDate = logToDelete.date.toDate();
+      const dayId = format(saleDate, 'yyyy-MM-dd');
+      const historyRef = doc(db, 'stockControlHistory', dayId);
+      const historySnap = await getDoc(historyRef);
+      
+      if (historySnap.exists()) {
+        const historyData = historySnap.data();
+        const updatedEntries = (historyData.entries || []).map((e: any) => {
+          if (e.productId === logToDelete.productId) {
+            return {
+              ...e,
+              qtySold: Math.max(0, (e.qtySold || 0) - logToDelete.quantity)
+            };
+          }
+          return e;
+        });
+        batch.update(historyRef, { entries: updatedEntries });
+      }
+
       batch.delete(doc(db, 'sales', logToDelete.id));
       await batch.commit();
 
-      toast.success('Sale log deleted and stock reverted');
+      toast.success('Sale log deleted from everywhere successfully');
       setLogToDelete(null);
     } catch (error: any) {
       console.error(error);

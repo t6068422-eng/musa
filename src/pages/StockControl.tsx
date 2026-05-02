@@ -98,6 +98,7 @@ export default function StockControl() {
   const [showDetailedStock, setShowDetailedStock] = useState(true);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
   const [manualDate, setManualDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [selectedImage, setSelectedImage] = useState<{ url: string, name: string } | null>(null);
   const { user, quotaExceeded, setQuotaExceeded } = useAuth();
   const isLocalChange = useRef(false);
   const productsRef = useRef<Product[]>([]);
@@ -1081,7 +1082,10 @@ export default function StockControl() {
                       <TableRow key={product.id} className="hover:bg-accent/5 border-b border-green-800/30">
                         <TableCell className="font-bold text-left border-r border-green-800/30 p-1 sticky left-0 bg-background/80 backdrop-blur-sm z-10 min-w-[150px]">
                           <div className="flex items-center gap-2 px-2">
-                            <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                            <div 
+                              className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                              onClick={() => product.imageUrl && setSelectedImage({ url: product.imageUrl, name: product.name })}
+                            >
                               {product.imageUrl ? (
                                 <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
                               ) : (
@@ -1450,6 +1454,35 @@ export default function StockControl() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsHistoryOpen(false)} className="w-full">Close</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Viewer Dialog (Passport Size) */}
+      <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
+        <DialogContent className="sm:max-w-[400px] p-0 overflow-hidden border-none bg-transparent shadow-none flex items-center justify-center">
+          <div className="bg-white p-4 rounded-lg shadow-2xl relative">
+            <button 
+              onClick={() => setSelectedImage(null)}
+              className="absolute -top-12 right-0 text-white hover:text-gray-200 bg-black/20 p-2 rounded-full backdrop-blur-sm"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <div className="text-center mb-2 font-bold text-gray-800 uppercase tracking-tight">
+              {selectedImage?.name}
+            </div>
+            {/* Passport Size Container: 3.5cm x 4.5cm ratio is ~7:9. Standard Passport 2x2 is 1:1. 
+                Using 350x450 scale (passport size proportions) */}
+            <div className="w-[350px] h-[450px] border-4 border-white shadow-inner bg-muted overflow-hidden">
+              <img 
+                src={selectedImage?.url} 
+                alt={selectedImage?.name} 
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="mt-4 text-center text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+              Passport Size View
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

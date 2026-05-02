@@ -7,17 +7,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Download, Package, Search, Image as ImageIcon } from 'lucide-react';
+import { Download, Package, Search, Image as ImageIcon, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '../context/AuthContext';
 import { exportToCSV } from '../lib/export';
 import { toPng } from 'html-to-image';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 
 export default function AvailableStock() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedImage, setSelectedImage] = useState<{ url: string, name: string } | null>(null);
   const { user } = useAuth();
   const stockRef = React.useRef<HTMLDivElement>(null);
 
@@ -128,7 +133,10 @@ export default function AvailableStock() {
                   return (
                     <TableRow key={product.id}>
                       <TableCell>
-                        <div className="w-10 h-10 rounded-md overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                        <div 
+                          className="w-10 h-10 rounded-md overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                          onClick={() => product.imageUrl && setSelectedImage({ url: product.imageUrl, name: product.name })}
+                        >
                           {product.imageUrl ? (
                             <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
                           ) : (
@@ -154,6 +162,34 @@ export default function AvailableStock() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Image Viewer Dialog (Passport Size) */}
+      <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
+        <DialogContent className="sm:max-w-[400px] p-0 overflow-hidden border-none bg-transparent shadow-none flex items-center justify-center">
+          <div className="bg-white p-4 rounded-lg shadow-2xl relative">
+            <button 
+              onClick={() => setSelectedImage(null)}
+              className="absolute -top-12 right-0 text-white hover:text-gray-200 bg-black/20 p-2 rounded-full backdrop-blur-sm"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <div className="text-center mb-2 font-bold text-gray-800 uppercase tracking-tight">
+              {selectedImage?.name}
+            </div>
+            {/* Passport Size Container */}
+            <div className="w-[350px] h-[450px] border-4 border-white shadow-inner bg-muted overflow-hidden">
+              <img 
+                src={selectedImage?.url} 
+                alt={selectedImage?.name} 
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="mt-4 text-center text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+              Passport Size View
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   </div>
 );
