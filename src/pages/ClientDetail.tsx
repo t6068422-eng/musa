@@ -828,7 +828,22 @@ export default function ClientDetail() {
                                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                                     <div className="md:col-span-12 space-y-1.5 relative">
                                       <Label className="text-[10px] uppercase text-muted-foreground">Product (Search or Type Manual Name)</Label>
-                                      <div className="flex gap-2">
+                                      <div className="flex gap-2 items-center">
+                                        {item.productId && products.find(p => p.id === item.productId)?.imageUrl && (
+                                          <div className="w-10 h-10 rounded-md border border-border overflow-hidden shrink-0 bg-muted flex items-center justify-center">
+                                            <img 
+                                              src={products.find(p => p.id === item.productId)?.imageUrl} 
+                                              alt={item.productName}
+                                              className="w-full h-full object-cover"
+                                              referrerPolicy="no-referrer"
+                                            />
+                                          </div>
+                                        )}
+                                        {!item.productId && item.productName && (
+                                          <div className="w-10 h-10 rounded-md border border-dashed border-border shrink-0 bg-muted/30 flex items-center justify-center">
+                                            <Package className="w-4 h-4 text-muted-foreground/40" />
+                                          </div>
+                                        )}
                                         <div className="relative flex-1 group/search">
                                           <Input 
                                             placeholder="Search or enter product name.."
