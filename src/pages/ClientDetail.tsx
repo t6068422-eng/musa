@@ -124,13 +124,15 @@ export default function ClientDetail() {
   };
   
   // Form State
-  const [formData, setFormData] = useState({
-    productId: '',
-    quantity: 1,
-    price: 0,
-    unitType: 'piece' as 'ctn' | 'piece',
-    date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
-  });
+  const [manualPurchaseItems, setManualPurchaseItems] = useState([
+    {
+      productId: '',
+      quantity: 1,
+      price: 0,
+      unitType: 'piece' as 'ctn' | 'piece'
+    }
+  ]);
+  const [manualPurchaseDate, setManualPurchaseDate] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
 
   const [editSaleData, setEditSaleData] = useState({
     productId: '',
@@ -213,64 +215,95 @@ export default function ClientDetail() {
     };
   }, [user, clientId, navigate, client?.name]);
 
-  const handleProductSelect = (pId: string) => {
-    const product = products.find(p => p.id === pId);
-    if (product) {
-      setFormData({
-        ...formData,
-        productId: pId,
-        price: product.price || 0
-      });
+  const addPurchaseItem = () => {
+    setManualPurchaseItems([
+      ...manualPurchaseItems,
+      { productId: '', quantity: 1, price: 0, unitType: 'piece' }
+    ]);
+  };
+
+  const removePurchaseItem = (index: number) => {
+    if (manualPurchaseItems.length <= 1) return;
+    setManualPurchaseItems(manualPurchaseItems.filter((_, i) => i !== index));
+  };
+
+  const updatePurchaseItem = (index: number, field: string, value: any) => {
+    const newItems = [...manualPurchaseItems];
+    newItems[index] = { ...newItems[index], [field]: value };
+    
+    // Auto-fill price if product changes
+    if (field === 'productId') {
+      const product = products.find(p => p.id === value);
+      if (product) {
+        newItems[index].price = product.price || 0;
+      }
     }
+    
+    setManualPurchaseItems(newItems);
   };
 
   const handleManualSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !client || !clientId) return;
     if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
-    if (!formData.productId || formData.quantity <= 0) {
-      return toast.error('Please select a product and valid quantity');
+    
+    // Validation
+    const invalidItems = manualPurchaseItems.filter(item => !item.productId || item.quantity <= 0);
+    if (invalidItems.length > 0) {
+      return toast.error('Please select products and valid quantities for all items');
     }
 
-    const selectedProduct = products.find(p => p.id === formData.productId);
-    if (!selectedProduct) return;
-
-    if (selectedProduct.currentStock < formData.quantity) {
-      return toast.error(`Insufficient stock! Only ${selectedProduct.currentStock} ${selectedProduct.unit} available.`);
+    // Stock Validation
+    for (const item of manualPurchaseItems) {
+      const selectedProduct = products.find(p => p.id === item.productId);
+      if (!selectedProduct) continue;
+      if (selectedProduct.currentStock < item.quantity) {
+        return toast.error(`Insufficient stock for ${selectedProduct.name}! Only ${selectedProduct.currentStock} available.`);
+      }
     }
 
     setSubmitting(true);
     try {
       const batch = writeBatch(db);
       // Construct local date properly from datetime-local string
-      const dateParts = formData.date.split('T');
+      const dateParts = manualPurchaseDate.split('T');
       const [year, month, day] = dateParts[0].split('-').map(Number);
       const [hour, minute] = dateParts[1].split(':').map(Number);
       const selectedDate = new Date(year, month - 1, day, hour, minute);
       
       const saleDate = Timestamp.fromDate(selectedDate);
-      const total = formData.quantity * formData.price;
-      
-      // 1. Create Sale Record
-      const saleRef = doc(collection(db, 'sales'));
-      batch.set(saleRef, {
-        productId: formData.productId,
-        productName: selectedProduct.name,
-        quantity: Number(formData.quantity),
-        price: Number(formData.price),
-        unitType: formData.unitType,
-        total: total,
-        date: saleDate,
-        soldBy: user.uid,
-        clientId: client.id,
-        clientName: client.name
-      });
+      let totalSpentInc = 0;
+      let totalQtyInc = 0;
 
-      // 2. Update Product Stock
-      const productRef = doc(db, 'products', formData.productId);
-      batch.update(productRef, {
-        currentStock: selectedProduct.currentStock - Number(formData.quantity)
-      });
+      for (const item of manualPurchaseItems) {
+        const selectedProduct = products.find(p => p.id === item.productId);
+        if (!selectedProduct) continue;
+
+        const total = item.quantity * item.price;
+        totalSpentInc += total;
+        totalQtyInc += Number(item.quantity);
+        
+        // 1. Create Sale Record
+        const saleRef = doc(collection(db, 'sales'));
+        batch.set(saleRef, {
+          productId: item.productId,
+          productName: selectedProduct.name,
+          quantity: Number(item.quantity),
+          price: Number(item.price),
+          unitType: item.unitType,
+          total: total,
+          date: saleDate,
+          soldBy: user.uid,
+          clientId: client.id,
+          clientName: client.name
+        });
+
+        // 2. Update Product Stock
+        const productRef = doc(db, 'products', item.productId);
+        batch.update(productRef, {
+          currentStock: selectedProduct.currentStock - Number(item.quantity)
+        });
+      }
 
       // 3. Update Client Stats
       const clientRef = doc(db, 'clients', client.id);
@@ -278,8 +311,8 @@ export default function ClientDetail() {
       const newPurchaseTime = saleDate.toMillis();
       
       const updateData: any = {
-        totalSpent: (client.totalSpent || 0) + total,
-        totalQuantity: (client.totalQuantity || 0) + Number(formData.quantity)
+        totalSpent: (client.totalSpent || 0) + totalSpentInc,
+        totalQuantity: (client.totalQuantity || 0) + totalQtyInc
       };
 
       if (newPurchaseTime > currentLastPurchase) {
@@ -290,15 +323,10 @@ export default function ClientDetail() {
 
       await batch.commit();
       
-      toast.success('Purchase recorded successfully');
+      toast.success(`${manualPurchaseItems.length} items recorded successfully`);
       setIsManualEntryOpen(false);
-      setFormData({ 
-        productId: '', 
-        quantity: 1, 
-        price: 0, 
-        unitType: 'piece',
-        date: format(new Date(), "yyyy-MM-dd'T'HH:mm")
-      });
+      setManualPurchaseItems([{ productId: '', quantity: 1, price: 0, unitType: 'piece' }]);
+      setManualPurchaseDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
     } catch (error: any) {
       console.error(error);
       toast.error('Failed to record purchase');
@@ -760,87 +788,145 @@ export default function ClientDetail() {
                       <DialogTrigger render={<Button variant="outline" size="sm" className="gap-2 border-primary/50 text-primary hover:bg-primary/5 h-8" />}>
                         <Plus className="w-3 h-3" /> Log Manual Purchase
                       </DialogTrigger>
-                      <DialogContent className="sm:max-w-[425px]">
+                      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
-                          <DialogTitle>Log Manual Purchase</DialogTitle>
+                          <DialogTitle className="flex items-center gap-2">
+                             <Package className="w-5 h-5 text-primary" /> Log Manual Purchase
+                          </DialogTitle>
                           <DialogDescription>
-                            Record a transaction for <strong>{client.name}</strong> manually.
+                            Record transactions for <strong>{client.name}</strong> manually.
                           </DialogDescription>
                         </DialogHeader>
-                        <form onSubmit={handleManualSale} className="space-y-4 py-4">
+                        <form onSubmit={handleManualSale} className="space-y-6 py-4">
                           <div className="grid gap-2">
-                            <Label htmlFor="date">Purchase Date & Time</Label>
+                            <Label htmlFor="date" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Purchase Date & Time</Label>
                             <Input 
                               id="date" 
                               type="datetime-local" 
-                              value={formData.date} 
-                              onChange={e => setFormData({ ...formData, date: e.target.value })}
+                              value={manualPurchaseDate} 
+                              onChange={e => setManualPurchaseDate(e.target.value)}
                               required
+                              className="h-10"
                             />
                           </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor="product">Product</Label>
-                            <Select onValueChange={handleProductSelect} value={formData.productId}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select product" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {products.map(p => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.name} ({p.currentStock} {p.unit} in stock)
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="unitType">Unit</Label>
-                              <Select 
-                                value={formData.unitType} 
-                                onValueChange={(val: 'ctn' | 'piece') => setFormData({ ...formData, unitType: val })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="piece">Piece</SelectItem>
-                                  <SelectItem value="ctn">Carton (Ctn)</SelectItem>
-                                </SelectContent>
-                              </Select>
+
+                          <div className="space-y-4">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+                              Order Items
+                              <span className="text-[10px] lowercase font-medium text-muted-foreground/60 tracking-normal normal-case">{manualPurchaseItems.length} items added</span>
+                            </Label>
+                            
+                            <div className="space-y-3">
+                              {manualPurchaseItems.map((item, index) => (
+                                <div key={index} className="p-4 rounded-xl bg-accent/30 border border-border/50 relative group animate-in fade-in slide-in-from-top-2 duration-200">
+                                  {manualPurchaseItems.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removePurchaseItem(index)}
+                                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-destructive text-white flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+
+                                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                                    <div className="md:col-span-5 space-y-1.5">
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Product</Label>
+                                      <Select 
+                                        onValueChange={(val) => updatePurchaseItem(index, 'productId', val)} 
+                                        value={item.productId}
+                                      >
+                                        <SelectTrigger className="h-9">
+                                          <SelectValue placeholder="Select product" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {products.map(p => (
+                                            <SelectItem key={p.id} value={p.id}>
+                                              {p.name} ({p.currentStock} {p.unit})
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+
+                                    <div className="md:col-span-2 space-y-1.5">
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Unit</Label>
+                                      <Select 
+                                        value={item.unitType} 
+                                        onValueChange={(val: 'ctn' | 'piece') => updatePurchaseItem(index, 'unitType', val)}
+                                      >
+                                        <SelectTrigger className="h-9">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="piece">Pcs</SelectItem>
+                                          <SelectItem value="ctn">Ctn</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+
+                                    <div className="md:col-span-2 space-y-1.5">
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Qty</Label>
+                                      <Input 
+                                        type="number" 
+                                        value={item.quantity} 
+                                        onChange={e => updatePurchaseItem(index, 'quantity', Number(e.target.value))}
+                                        min="1"
+                                        required
+                                        className="h-9"
+                                      />
+                                    </div>
+
+                                    <div className="md:col-span-3 space-y-1.5">
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Price (Rs.)</Label>
+                                      <Input 
+                                        type="number" 
+                                        step="0.01"
+                                        value={item.price} 
+                                        onChange={e => updatePurchaseItem(index, 'price', Number(e.target.value))}
+                                        min="0"
+                                        required
+                                        className="h-9"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-3 pt-3 border-t border-border/20 flex justify-between items-center bg-muted/20 -mx-4 -mb-4 px-4 py-2 rounded-b-xl">
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                                      {item.productId ? products.find(p => p.id === item.productId)?.name : 'No product selected'}
+                                      <span className="opacity-20">|</span>
+                                      {item.quantity} × {item.price.toLocaleString()}
+                                    </span>
+                                    <span className="text-sm font-black text-primary">Rs. {(item.quantity * item.price).toLocaleString()}</span>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                            <div className="grid gap-2">
-                              <Label htmlFor="quantity">Qty</Label>
-                              <Input 
-                                id="quantity" 
-                                type="number" 
-                                value={formData.quantity} 
-                                onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })}
-                                min="1"
-                                required
-                              />
-                            </div>
-                            <div className="grid gap-2 lg:col-span-1 col-span-2">
-                              <Label htmlFor="price">Price (Rs.)</Label>
-                              <Input 
-                                id="price" 
-                                type="number" 
-                                step="0.01"
-                                value={formData.price} 
-                                onChange={e => setFormData({ ...formData, price: Number(e.target.value) })}
-                                min="0"
-                                required
-                              />
-                            </div>
+
+                            <Button 
+                              type="button" 
+                              variant="outline" 
+                              onClick={addPurchaseItem}
+                              className="w-full h-12 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 flex items-center justify-center gap-2 group transition-all"
+                            >
+                              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                                <Plus className="w-3.5 h-3.5 text-primary" />
+                              </div>
+                              <span className="text-xs font-bold uppercase tracking-widest text-primary">Add More Items</span>
+                            </Button>
                           </div>
-                          <div className="p-3 rounded-lg bg-accent/50 border border-border/50 text-center">
-                            <p className="text-xs text-muted-foreground uppercase font-bold tracking-widest mb-1">Total Calculation</p>
-                            <p className="text-2xl font-bold text-primary">Rs. {(formData.quantity * formData.price).toLocaleString()}</p>
+
+                          <div className="p-4 rounded-xl bg-primary/5 border-2 border-primary/20 flex flex-col items-center justify-center gap-1 shadow-inner">
+                            <p className="text-[10px] text-primary/60 uppercase font-black tracking-[0.2em]">Grand Total Calculation</p>
+                            <p className="text-3xl font-black text-primary">
+                              Rs. {manualPurchaseItems.reduce((sum, item) => sum + (item.quantity * item.price), 0).toLocaleString()}
+                            </p>
                           </div>
-                          <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsManualEntryOpen(false)}>Cancel</Button>
-                            <Button type="submit" disabled={submitting}>
-                              {submitting ? 'Recording...' : 'Save Purchase'}
+
+                          <DialogFooter className="gap-2 sm:gap-0">
+                            <Button type="button" variant="ghost" onClick={() => setIsManualEntryOpen(false)} className="font-bold">Cancel</Button>
+                            <Button type="submit" disabled={submitting} className="font-bold min-w-[140px] shadow-lg shadow-primary/20">
+                              {submitting ? 'Recording...' : 'Save All Changes'}
                             </Button>
                           </DialogFooter>
                         </form>
