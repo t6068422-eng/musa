@@ -127,6 +127,7 @@ export default function ClientDetail() {
   const [manualPurchaseItems, setManualPurchaseItems] = useState([
     {
       productId: '',
+      productName: '',
       quantity: 1,
       price: 0,
       unitType: 'piece' as 'ctn' | 'piece'
@@ -218,7 +219,7 @@ export default function ClientDetail() {
   const addPurchaseItem = () => {
     setManualPurchaseItems([
       ...manualPurchaseItems,
-      { productId: '', quantity: 1, price: 0, unitType: 'piece' }
+      { productId: '', productName: '', quantity: 1, price: 0, unitType: 'piece' }
     ]);
   };
 
@@ -227,19 +228,12 @@ export default function ClientDetail() {
     setManualPurchaseItems(manualPurchaseItems.filter((_, i) => i !== index));
   };
 
-  const updatePurchaseItem = (index: number, field: string, value: any) => {
-    const newItems = [...manualPurchaseItems];
-    newItems[index] = { ...newItems[index], [field]: value };
-    
-    // Auto-fill price if product changes
-    if (field === 'productId') {
-      const product = products.find(p => p.id === value);
-      if (product) {
-        newItems[index].price = product.price || 0;
-      }
-    }
-    
-    setManualPurchaseItems(newItems);
+  const updatePurchaseItem = (index: number, updates: Partial<typeof manualPurchaseItems[0]>) => {
+    setManualPurchaseItems(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], ...updates };
+      return next;
+    });
   };
 
   const handleManualSale = async (e: React.FormEvent) => {
@@ -248,13 +242,14 @@ export default function ClientDetail() {
     if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
     
     // Validation
-    const invalidItems = manualPurchaseItems.filter(item => !item.productId || item.quantity <= 0);
+    const invalidItems = manualPurchaseItems.filter(item => !item.productName || item.quantity <= 0);
     if (invalidItems.length > 0) {
-      return toast.error('Please select products and valid quantities for all items');
+      return toast.error('Please enter product names and valid quantities for all items');
     }
 
     // Stock Validation
     for (const item of manualPurchaseItems) {
+      if (!item.productId) continue; // Skip physical stock check for manual entries
       const selectedProduct = products.find(p => p.id === item.productId);
       if (!selectedProduct) continue;
       if (selectedProduct.currentStock < item.quantity) {
@@ -277,8 +272,7 @@ export default function ClientDetail() {
 
       for (const item of manualPurchaseItems) {
         const selectedProduct = products.find(p => p.id === item.productId);
-        if (!selectedProduct) continue;
-
+        
         const total = item.quantity * item.price;
         totalSpentInc += total;
         totalQtyInc += Number(item.quantity);
@@ -286,8 +280,8 @@ export default function ClientDetail() {
         // 1. Create Sale Record
         const saleRef = doc(collection(db, 'sales'));
         batch.set(saleRef, {
-          productId: item.productId,
-          productName: selectedProduct.name,
+          productId: item.productId || 'manual',
+          productName: item.productName,
           quantity: Number(item.quantity),
           price: Number(item.price),
           unitType: item.unitType,
@@ -298,11 +292,13 @@ export default function ClientDetail() {
           clientName: client.name
         });
 
-        // 2. Update Product Stock
-        const productRef = doc(db, 'products', item.productId);
-        batch.update(productRef, {
-          currentStock: selectedProduct.currentStock - Number(item.quantity)
-        });
+        // 2. Update Product Stock (only if it's a registered product)
+        if (item.productId && selectedProduct) {
+          const productRef = doc(db, 'products', item.productId);
+          batch.update(productRef, {
+            currentStock: selectedProduct.currentStock - Number(item.quantity)
+          });
+        }
       }
 
       // 3. Update Client Stats
@@ -325,7 +321,7 @@ export default function ClientDetail() {
       
       toast.success(`${manualPurchaseItems.length} items recorded successfully`);
       setIsManualEntryOpen(false);
-      setManualPurchaseItems([{ productId: '', quantity: 1, price: 0, unitType: 'piece' }]);
+      setManualPurchaseItems([{ productId: '', productName: '', quantity: 1, price: 0, unitType: 'piece' }]);
       setManualPurchaseDate(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
     } catch (error: any) {
       console.error(error);
@@ -830,32 +826,68 @@ export default function ClientDetail() {
                                   )}
 
                                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                                    <div className="md:col-span-5 space-y-1.5">
-                                      <Label className="text-[10px] uppercase text-muted-foreground">Product</Label>
-                                      <Select 
-                                        onValueChange={(val) => updatePurchaseItem(index, 'productId', val)} 
-                                        value={item.productId}
-                                      >
-                                        <SelectTrigger className="h-9">
-                                          <SelectValue placeholder="Select product" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {products.map(p => (
-                                            <SelectItem key={p.id} value={p.id}>
-                                              {p.name} ({p.currentStock} {p.unit})
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
+                                    <div className="md:col-span-12 space-y-1.5 relative">
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Product (Search or Type Manual Name)</Label>
+                                      <div className="flex gap-2">
+                                        <div className="relative flex-1 group/search">
+                                          <Input 
+                                            placeholder="Search or enter product name.."
+                                            value={item.productName}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              const match = products.find(p => p.name.toLowerCase() === val.toLowerCase());
+                                              updatePurchaseItem(index, {
+                                                productName: val,
+                                                productId: match ? match.id : '',
+                                                price: match ? (match.price || 0) : item.price
+                                              });
+                                            }}
+                                            className="h-10"
+                                          />
+                                          {item.productName && !products.find(p => p.name.toLowerCase() === item.productName.toLowerCase()) && (
+                                            <div className="absolute right-3 top-2.5">
+                                              <Badge variant="outline" className="text-[8px] h-5 bg-orange-50 text-orange-600 border-orange-200 uppercase font-black">Manual Entry</Badge>
+                                            </div>
+                                          )}
+                                          
+                                          {/* Simple Suggestions List */}
+                                          {item.productName && products.some(p => p.name.toLowerCase().includes(item.productName.toLowerCase()) && p.name !== item.productName) && (
+                                            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto hidden group-focus-within/search:block hover:block">
+                                              {products
+                                                .filter(p => p.name.toLowerCase().includes(item.productName.toLowerCase()) && p.name !== item.productName)
+                                                .map(p => (
+                                                  <button
+                                                    key={p.id}
+                                                    type="button"
+                                                    className="w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors flex justify-between items-center"
+                                                    onMouseDown={(e) => {
+                                                      // Use onMouseDown + preventDefault to capture click before blur
+                                                      e.preventDefault(); 
+                                                      updatePurchaseItem(index, {
+                                                        productId: p.id,
+                                                        productName: p.name,
+                                                        price: p.price || 0
+                                                      });
+                                                    }}
+                                                  >
+                                                    <span className="font-medium">{p.name}</span>
+                                                    <span className="text-[10px] text-muted-foreground">Rs. {p.price} | {p.currentStock} in stock</span>
+                                                  </button>
+                                                ))
+                                              }
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
                                     </div>
 
-                                    <div className="md:col-span-2 space-y-1.5">
+                                    <div className="md:col-span-4 space-y-1.5">
                                       <Label className="text-[10px] uppercase text-muted-foreground">Unit</Label>
                                       <Select 
                                         value={item.unitType} 
-                                        onValueChange={(val: 'ctn' | 'piece') => updatePurchaseItem(index, 'unitType', val)}
+                                        onValueChange={(val: 'ctn' | 'piece') => updatePurchaseItem(index, { unitType: val })}
                                       >
-                                        <SelectTrigger className="h-9">
+                                        <SelectTrigger className="h-10">
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -865,28 +897,28 @@ export default function ClientDetail() {
                                       </Select>
                                     </div>
 
-                                    <div className="md:col-span-2 space-y-1.5">
+                                    <div className="md:col-span-4 space-y-1.5">
                                       <Label className="text-[10px] uppercase text-muted-foreground">Qty</Label>
                                       <Input 
                                         type="number" 
                                         value={item.quantity} 
-                                        onChange={e => updatePurchaseItem(index, 'quantity', Number(e.target.value))}
+                                        onChange={e => updatePurchaseItem(index, { quantity: Number(e.target.value) })}
                                         min="1"
                                         required
-                                        className="h-9"
+                                        className="h-10"
                                       />
                                     </div>
 
-                                    <div className="md:col-span-3 space-y-1.5">
+                                    <div className="md:col-span-4 space-y-1.5">
                                       <Label className="text-[10px] uppercase text-muted-foreground">Price (Rs.)</Label>
                                       <Input 
                                         type="number" 
                                         step="0.01"
                                         value={item.price} 
-                                        onChange={e => updatePurchaseItem(index, 'price', Number(e.target.value))}
+                                        onChange={e => updatePurchaseItem(index, { price: Number(e.target.value) })}
                                         min="0"
                                         required
-                                        className="h-9"
+                                        className="h-10"
                                       />
                                     </div>
                                   </div>
