@@ -30,6 +30,8 @@ import {
   Timestamp,
   writeBatch,
   updateDoc,
+  getDoc,
+  setDoc,
   deleteDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -270,6 +272,14 @@ export default function ClientDetail() {
       let totalSpentInc = 0;
       let totalQtyInc = 0;
 
+      // Fetch Stock Control Draft to keep in sync
+      const draftRef = doc(db, 'settings', 'stockControlDraft');
+      const draftSnap = await getDoc(draftRef);
+      const draftData = draftSnap.exists() ? draftSnap.data() : { entries: {} };
+      const draftEntries = { ...(draftData.entries || {}) };
+      let hasDraftUpdate = false;
+      const isToday = format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+
       for (const item of manualPurchaseItems) {
         const selectedProduct = products.find(p => p.id === item.productId);
         
@@ -295,9 +305,56 @@ export default function ClientDetail() {
         // 2. Update Product Stock (only if it's a registered product)
         if (item.productId && selectedProduct) {
           const productRef = doc(db, 'products', item.productId);
+          const newCurrentStock = (selectedProduct.currentStock || 0) - Number(item.quantity);
+          const newAvailableStock = (selectedProduct.availableStock || 0) - Number(item.quantity);
+          
           batch.update(productRef, {
-            currentStock: selectedProduct.currentStock - Number(item.quantity)
+            currentStock: newCurrentStock,
+            availableStock: Math.max(0, newAvailableStock)
           });
+
+          // 2.1 Sync with Stock Control Draft if it's today
+          if (isToday) {
+            const currentEntry = draftEntries[item.productId] || {
+              productId: item.productId,
+              production: 0,
+              qtySold: 0,
+              maxProduction: 0,
+              price: selectedProduct.price || 0,
+              preparedStock: selectedProduct.currentStock,
+              customFields: {}
+            };
+            
+            draftEntries[item.productId] = {
+              ...currentEntry,
+              qtySold: (currentEntry.qtySold || 0) + Number(item.quantity)
+            };
+            hasDraftUpdate = true;
+          }
+        }
+      }
+
+      // Sync Draft back to Firebase if updated
+      if (hasDraftUpdate) {
+        await setDoc(draftRef, { 
+          entries: draftEntries, 
+          lastUpdated: Timestamp.now(),
+          updatedBy: user.uid
+        }, { merge: true });
+
+        // Also sync to localStorage for cross-tab immediate update
+        try {
+          localStorage.setItem(`stockDraft_${user.uid}`, JSON.stringify({
+            entries: draftEntries,
+            timestamp: Date.now()
+          }));
+          // Notify other tabs
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: `stockDraft_${user.uid}`,
+            newValue: localStorage.getItem(`stockDraft_${user.uid}`)
+          }));
+        } catch (e) {
+          console.error('Failed to sync draft to localStorage:', e);
         }
       }
 
@@ -413,6 +470,69 @@ export default function ClientDetail() {
         totalQuantity: (client.totalQuantity || 0) + totalQtyDiff
       });
 
+      // 4. Sync with Stock Control Draft if date is today
+      const isToday = format(newDate.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+      const wasToday = format(editingSale.date.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+
+      if (isToday || wasToday) {
+        const draftRef = doc(db, 'settings', 'stockControlDraft');
+        const draftSnap = await getDoc(draftRef);
+        const draftData = draftSnap.exists() ? draftSnap.data() : { entries: {} };
+        const draftEntries = { ...(draftData.entries || {}) };
+        let hasDraftUpdate = false;
+
+        // If it was today, subtract old quantity
+        if (wasToday && draftEntries[editingSale.productId]) {
+          draftEntries[editingSale.productId] = {
+            ...draftEntries[editingSale.productId],
+            qtySold: Math.max(0, (draftEntries[editingSale.productId].qtySold || 0) - editingSale.quantity)
+          };
+          hasDraftUpdate = true;
+        }
+
+        // If it is today, add new quantity
+        if (isToday) {
+          const prodId = editSaleData.productId;
+          const currentEntry = draftEntries[prodId] || {
+            productId: prodId,
+            production: 0,
+            qtySold: 0,
+            maxProduction: 0,
+            price: newProduct.price || 0,
+            preparedStock: newProduct.currentStock,
+            customFields: {}
+          };
+          
+          draftEntries[prodId] = {
+            ...currentEntry,
+            qtySold: (currentEntry.qtySold || 0) + newQty
+          };
+          hasDraftUpdate = true;
+        }
+
+        if (hasDraftUpdate) {
+          batch.set(draftRef, { 
+            entries: draftEntries, 
+            lastUpdated: Timestamp.now(),
+            updatedBy: user.uid
+          }, { merge: true });
+
+          // Local storage sync
+          try {
+            localStorage.setItem(`stockDraft_${user.uid}`, JSON.stringify({
+              entries: draftEntries,
+              timestamp: Date.now()
+            }));
+            window.dispatchEvent(new StorageEvent('storage', {
+              key: `stockDraft_${user.uid}`,
+              newValue: localStorage.getItem(`stockDraft_${user.uid}`)
+            }));
+          } catch (e) {
+            console.error('Failed to sync draft to localStorage:', e);
+          }
+        }
+      }
+
       await batch.commit();
       toast.success('Purchase history updated');
       setEditingSale(null);
@@ -452,6 +572,43 @@ export default function ClientDetail() {
         totalQuantity: (client.totalQuantity || 0) - saleToDelete.quantity
       });
       batch.delete(doc(db, 'sales', saleToDelete.id));
+
+      // 3. Sync with Stock Control Draft if it was today
+      const isToday = format(saleToDelete.date.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+      if (isToday) {
+        const draftRef = doc(db, 'settings', 'stockControlDraft');
+        const draftSnap = await getDoc(draftRef);
+        if (draftSnap.exists()) {
+          const draftData = draftSnap.data();
+          const draftEntries = { ...(draftData.entries || {}) };
+          if (draftEntries[saleToDelete.productId]) {
+            draftEntries[saleToDelete.productId] = {
+              ...draftEntries[saleToDelete.productId],
+              qtySold: Math.max(0, (draftEntries[saleToDelete.productId].qtySold || 0) - saleToDelete.quantity)
+            };
+            batch.set(draftRef, { 
+              entries: draftEntries, 
+              lastUpdated: Timestamp.now(),
+              updatedBy: user.uid
+            }, { merge: true });
+
+            // Local storage sync
+            try {
+              localStorage.setItem(`stockDraft_${user.uid}`, JSON.stringify({
+                entries: draftEntries,
+                timestamp: Date.now()
+              }));
+              window.dispatchEvent(new StorageEvent('storage', {
+                key: `stockDraft_${user.uid}`,
+                newValue: localStorage.getItem(`stockDraft_${user.uid}`)
+              }));
+            } catch (e) {
+              console.error('Failed to sync draft to localStorage:', e);
+            }
+          }
+        }
+      }
+
       await batch.commit();
       toast.success('Purchase record deleted');
       setSaleToDelete(null);
@@ -486,6 +643,36 @@ export default function ClientDetail() {
         }
 
         await batch.commit();
+
+        // Sync with Stock Control Draft if it was today
+        const isToday = format(sale.date.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+        if (isToday) {
+          const draftRef = doc(db, 'settings', 'stockControlDraft');
+          const draftSnap = await getDoc(draftRef);
+          if (draftSnap.exists()) {
+            const draftData = draftSnap.data();
+            const draftEntries = { ...(draftData.entries || {}) };
+            const currentEntry = draftEntries[sale.productId] || {
+              productId: sale.productId,
+              production: 0,
+              qtySold: 0,
+              maxProduction: 0,
+              price: sale.price,
+              preparedStock: product?.currentStock || 0,
+              customFields: {}
+            };
+            
+            draftEntries[sale.productId] = {
+              ...currentEntry,
+              qtySold: (currentEntry.qtySold || 0) + sale.quantity
+            };
+            
+            await setDoc(draftRef, { entries: draftEntries, lastUpdated: Timestamp.now() }, { merge: true });
+            localStorage.setItem(`stockDraft_${user.uid}`, JSON.stringify({ entries: draftEntries, timestamp: Date.now() }));
+            window.dispatchEvent(new StorageEvent('storage', { key: `stockDraft_${user.uid}`, newValue: localStorage.getItem(`stockDraft_${user.uid}`) }));
+          }
+        }
+
         toast.success('Action reverted');
       } else if (lastAction.type === 'edit') {
         const batch = writeBatch(db);
@@ -502,6 +689,38 @@ export default function ClientDetail() {
         }
 
         await batch.commit();
+
+        // Sync with Stock Control Draft if today or was today
+        const isToday = format(newSale.date.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+        const wasToday = format(oldSale.date.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+        
+        if (isToday || wasToday) {
+          const draftRef = doc(db, 'settings', 'stockControlDraft');
+          const draftSnap = await getDoc(draftRef);
+          if (draftSnap.exists()) {
+            const draftData = draftSnap.data();
+            const draftEntries = { ...(draftData.entries || {}) };
+            let hasUpdate = false;
+
+            if (wasToday && draftEntries[newSale.productId]) {
+              draftEntries[newSale.productId].qtySold = Math.max(0, (draftEntries[newSale.productId].qtySold || 0) - newSale.quantity);
+              hasUpdate = true;
+            }
+            if (isToday) {
+              const e = draftEntries[oldSale.productId] || { productId: oldSale.productId, production: 0, qtySold: 0, maxProduction: 0, preparedStock: 0, customFields: {} };
+              e.qtySold = (e.qtySold || 0) + oldSale.quantity;
+              draftEntries[oldSale.productId] = e;
+              hasUpdate = true;
+            }
+
+            if (hasUpdate) {
+              await setDoc(draftRef, { entries: draftEntries, lastUpdated: Timestamp.now() }, { merge: true });
+              localStorage.setItem(`stockDraft_${user.uid}`, JSON.stringify({ entries: draftEntries, timestamp: Date.now() }));
+              window.dispatchEvent(new StorageEvent('storage', { key: `stockDraft_${user.uid}`, newValue: localStorage.getItem(`stockDraft_${user.uid}`) }));
+            }
+          }
+        }
+
         toast.success('Reverted purchase changes');
       }
       setUndoStack(remainingStack);

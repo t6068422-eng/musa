@@ -20,7 +20,8 @@ import {
   orderBy,
   limit,
   writeBatch,
-  getDoc
+  getDoc,
+  setDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
@@ -163,13 +164,41 @@ export default function Production() {
           if (e.productId === logToDelete.productId) {
             return {
               ...e,
-              production: Math.max(0, (e.production || 0) - logToDelete.quantity),
-              preparedStock: Math.max(0, (e.preparedStock || e.production || 0) - logToDelete.quantity)
+              production: Math.max(0, (e.production || 0) - logToDelete.quantity)
             };
           }
           return e;
         });
         batch.update(historyRef, { entries: updatedEntries });
+      }
+      
+      // Also Update Stock Control Draft if it's today
+      const isToday = dayId === format(new Date(), 'yyyy-MM-dd');
+      if (isToday) {
+        const draftRef = doc(db, 'settings', 'stockControlDraft');
+        const draftSnap = await getDoc(draftRef);
+        if (draftSnap.exists()) {
+          const draftData = draftSnap.data();
+          const draftEntries = { ...(draftData.entries || {}) };
+          if (draftEntries[logToDelete.productId]) {
+            const entry = draftEntries[logToDelete.productId];
+            const newProd = Math.max(0, (entry.production || 0) - logToDelete.quantity);
+            draftEntries[logToDelete.productId] = {
+              ...entry,
+              production: newProd,
+              maxProduction: newProd // Reset maxProduction to match the decreased total
+            };
+            batch.set(draftRef, { entries: draftEntries, lastUpdated: Timestamp.now() }, { merge: true });
+            
+            // Local storage sync
+            try {
+              localStorage.setItem(`stockDraft_${user.uid}`, JSON.stringify({ entries: draftEntries, timestamp: Date.now() }));
+              window.dispatchEvent(new StorageEvent('storage', { key: `stockDraft_${user.uid}`, newValue: localStorage.getItem(`stockDraft_${user.uid}`) }));
+            } catch (e) {
+              console.error('Failed to sync draft to localStorage:', e);
+            }
+          }
+        }
       }
       
       batch.delete(doc(db, 'production', logToDelete.id));
@@ -245,8 +274,61 @@ export default function Production() {
       }
 
       // 3. Update the product stock
-      batch.update(productRef, { currentStock: newStock });
+      batch.update(productRef, { 
+        currentStock: newStock,
+        availableStock: Math.max(0, (selectedProduct.availableStock || 0) + Number(formData.quantity) - Number(formData.qtySold))
+      });
       
+      // 4. Sync with Stock Control Draft if today
+      if (isToday) {
+        const draftRef = doc(db, 'settings', 'stockControlDraft');
+        const draftSnap = await getDoc(draftRef);
+        const draftData = draftSnap.exists() ? draftSnap.data() : { entries: {} };
+        const draftEntries = { ...(draftData.entries || {}) };
+        
+        const currentEntry = draftEntries[formData.productId] || {
+          productId: formData.productId,
+          production: 0,
+          qtySold: 0,
+          maxProduction: 0,
+          price: selectedProduct.price || 0,
+          preparedStock: selectedProduct.currentStock,
+          customFields: {}
+        };
+
+        // We only ADD to the draft production/sold values
+        const updatedEntry = {
+          ...currentEntry,
+          production: (currentEntry.production || 0) + Number(formData.quantity),
+          qtySold: (currentEntry.qtySold || 0) + Number(formData.qtySold)
+        };
+        
+        // Ensure maxProduction tracks the highest value
+        updatedEntry.maxProduction = Math.max(Number(currentEntry.maxProduction || 0), updatedEntry.production);
+        
+        draftEntries[formData.productId] = updatedEntry;
+        
+        await setDoc(draftRef, { 
+          entries: draftEntries, 
+          lastUpdated: Timestamp.now(),
+          updatedBy: user.uid
+        }, { merge: true });
+
+        // Local storage sync for cross-tab immediate update
+        try {
+          localStorage.setItem(`stockDraft_${user.uid}`, JSON.stringify({
+            entries: draftEntries,
+            timestamp: Date.now()
+          }));
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: `stockDraft_${user.uid}`,
+            newValue: localStorage.getItem(`stockDraft_${user.uid}`)
+          }));
+        } catch (e) {
+          console.error('Failed to sync draft to localStorage:', e);
+        }
+      }
+
       await batch.commit();
 
       toast.success('Inventory updated successfully');

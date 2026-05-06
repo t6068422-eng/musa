@@ -173,12 +173,17 @@ export default function SavedData() {
     const header = `Product,Prepared Stock,Production,Qty Sold,Price,Revenue,New Prepared Stock${customHeaders}\n`;
     
     const rows = record.entries.map(e => {
-      const newStock = e.preparedStock - e.qtySold;
-      const revenue = e.qtySold * (e.price || 0);
+      const prepared = e.preparedStock || 0;
+      const production = e.production || 0;
+      const sold = e.qtySold || 0;
+      const price = e.price || 0;
+      
+      const newStock = prepared + production - sold;
+      const revenue = sold * price;
       const customData = record.customColumns.map(c => `"${e.customFields[c] || ''}"`).join(',');
       const customDataStr = customData ? `,${customData}` : '';
       
-      return `"${e.productName}",${e.preparedStock},${e.production},${e.qtySold},${e.price || 0},${revenue},${newStock}${customDataStr}`;
+      return `"${e.productName}",${prepared},${production},${sold},${price},${revenue},${newStock}${customDataStr}`;
     }).join("\n");
 
     const content = `MUSA TRADERS - STOCK CONTROL SHEET (HISTORY)\nSaved By: ${record.savedByName}\nDate: ${dateStr}\nDay: ${dayStr}\nTime: ${timeStr}\n\n${header}${rows}`;
@@ -298,32 +303,33 @@ export default function SavedData() {
                               <TableBody>
                                   {record.entries.map((entry, idx) => {
                                     if (!entry) return null;
-                                    const prepared = entry.preparedStock || 0;
-                                    const sold = entry.qtySold || 0;
-                                    const price = entry.price || 0;
-                                    return (
-                                     <TableRow key={idx}>
-                                       <TableCell className="sticky left-0 bg-background/80 backdrop-blur-sm z-10">
-                                         <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
-                                           {entry.imageUrl ? (
-                                             <img src={entry.imageUrl} alt={entry.productName} className="w-full h-full object-cover" />
-                                           ) : (
-                                             <Package className="w-4 h-4 text-muted-foreground/40" />
-                                           )}
-                                         </div>
-                                       </TableCell>
-                                       <TableCell className="font-medium sticky left-12 bg-background/80 backdrop-blur-sm z-10">{entry.productName}</TableCell>
-                                       <TableCell className="text-center">
-                                         <span className="text-[10px] font-bold uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                           {entry.unitType || 'piece'}
-                                         </span>
-                                       </TableCell>
-                                       <TableCell className="text-center">{prepared}</TableCell>
-                                       <TableCell className="text-center">{entry.production || 0}</TableCell>
-                                       <TableCell className="text-center">{sold}</TableCell>
-                                       <TableCell className="text-center">Rs. {price.toLocaleString()}</TableCell>
-                                       <TableCell className="text-center font-bold text-blue-600">Rs. {(sold * price).toLocaleString()}</TableCell>
-                                       <TableCell className="text-center font-bold">{prepared - sold}</TableCell>
+                                     const prepared = entry.preparedStock || 0;
+                                     const production = entry.production || 0;
+                                     const sold = entry.qtySold || 0;
+                                     const price = entry.price || 0;
+                                     return (
+                                      <TableRow key={idx}>
+                                        <TableCell className="sticky left-0 bg-background/80 backdrop-blur-sm z-10">
+                                          <div className="w-8 h-8 rounded shrink-0 overflow-hidden border border-border/50 bg-muted/30 flex items-center justify-center">
+                                            {entry.imageUrl ? (
+                                              <img src={entry.imageUrl} alt={entry.productName} className="w-full h-full object-cover" />
+                                            ) : (
+                                              <Package className="w-4 h-4 text-muted-foreground/40" />
+                                            )}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="font-medium sticky left-12 bg-background/80 backdrop-blur-sm z-10">{entry.productName}</TableCell>
+                                        <TableCell className="text-center">
+                                          <span className="text-[10px] font-bold uppercase text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                            {entry.unitType || 'piece'}
+                                          </span>
+                                        </TableCell>
+                                        <TableCell className="text-center">{prepared}</TableCell>
+                                        <TableCell className="text-center">{production}</TableCell>
+                                        <TableCell className="text-center">{sold}</TableCell>
+                                        <TableCell className="text-center">Rs. {price.toLocaleString()}</TableCell>
+                                        <TableCell className="text-center font-bold text-blue-600">Rs. {(sold * price).toLocaleString()}</TableCell>
+                                        <TableCell className="text-center font-bold">{prepared + production - sold}</TableCell>
                                        {record.customColumns.map(col => (
                                          <TableCell key={col} className="text-center">{(entry.customFields && entry.customFields[col]) || '-'}</TableCell>
                                        ))}
@@ -350,7 +356,7 @@ export default function SavedData() {
                                          Rs. {record.entries.reduce((sum, e) => sum + ((e?.qtySold || 0) * (e?.price || 0)), 0).toLocaleString()}
                                        </TableCell>
                                        <TableCell className="text-center font-black text-base">
-                                         {record.entries.reduce((sum, e) => sum + ((e?.preparedStock || 0) - (e?.qtySold || 0)), 0)}
+                                         {record.entries.reduce((sum, e) => sum + ((e?.preparedStock || 0) + (e?.production || 0) - (e?.qtySold || 0)), 0)}
                                        </TableCell>
                                        {record.customColumns.map((col, i) => (
                                          <TableCell key={i}></TableCell>

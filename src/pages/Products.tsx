@@ -163,7 +163,7 @@ export default function Products() {
         minStockLevel: Number(formData.minStockLevel),
         currentStock: Number(formData.currentStock),
         price: Number(formData.price),
-        availableStock: 0, // Initialize available stock
+        availableStock: Number(formData.currentStock), // Initialize available stock correctly
         createdAt: Timestamp.now()
       });
       toast.success('Product added successfully');
@@ -181,10 +181,14 @@ export default function Products() {
     if (quotaExceeded) return toast.error('Cloud actions temporarily disabled due to daily quota limit.');
 
     try {
+      const stockDelta = Number(formData.currentStock) - editingProduct.currentStock;
+      const newAvailableStock = Math.max(0, (editingProduct.availableStock || 0) + stockDelta);
+
       await updateDoc(doc(db, 'products', editingProduct.id), {
         ...formData,
         minStockLevel: Number(formData.minStockLevel),
         currentStock: Number(formData.currentStock),
+        availableStock: newAvailableStock,
         price: Number(formData.price)
       });
       toast.success('Product updated successfully');

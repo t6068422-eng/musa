@@ -31,6 +31,7 @@ import {
   updateDoc,
   setDoc,
   getDoc,
+  getDocs,
   limit,
   increment
 } from 'firebase/firestore';
@@ -95,7 +96,8 @@ export default function StockControl() {
   const [quickEntryProductId, setQuickEntryProductId] = useState('');
   const [quickEntryProduction, setQuickEntryProduction] = useState('');
   const [quickEntryQtySold, setQuickEntryQtySold] = useState('');
-  const [showDetailedStock, setShowDetailedStock] = useState(true);
+  const [showDetailedStock, setShowDetailedStock] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
   const [manualDate, setManualDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedImage, setSelectedImage] = useState<{ url: string, name: string } | null>(null);
@@ -153,6 +155,26 @@ export default function StockControl() {
 
     // Fetch Settings
     const settingsRef = doc(db, 'settings', 'stockControl');
+    
+    // Check if current user is admin
+    const checkAdmin = async () => {
+      if (!user) return;
+      try {
+        const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+        if (adminDoc.exists()) {
+          setIsAdminUser(true);
+        } else {
+          // If the app doesn't have an admins collection strictly, 
+          // we treat anyone with email as admin for now or check a role
+          // In this template, we assume admin presence if the doc exists
+          setIsAdminUser(false);
+        }
+      } catch (e) {
+        setIsAdminUser(false);
+      }
+    };
+    checkAdmin();
+
     const unsubscribeSettings = onSnapshot(settingsRef, (doc) => {
       if (doc.exists()) {
         setCustomColumns(doc.data().customColumns || []);
@@ -173,45 +195,28 @@ export default function StockControl() {
       setLoading(false);
     });
 
-    // Fetch Recent History
-    const historyQ = query(collection(db, 'stockControlHistory'), limit(5));
-    const unsubscribeHistory = onSnapshot(historyQ, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
-      setRecentHistory(data.sort((a: any, b: any) => {
-        const dateA = a.date?.toMillis() || 0;
-        const dateB = b.date?.toMillis() || 0;
-        return dateB - dateA;
-      }));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'stockControlHistory');
-    });
+    // Fetch Recent History (Once on mount to reduce active streams)
+    const fetchHistory = async () => {
+      try {
+        const historyQ = query(collection(db, 'stockControlHistory'), limit(5));
+        const snapshot = await getDocs(historyQ);
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setRecentHistory(data.sort((a: any, b: any) => {
+          const dateA = a.date?.toMillis() || 0;
+          const dateB = b.date?.toMillis() || 0;
+          return dateB - dateA;
+        }));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.LIST, 'stockControlHistory');
+      }
+    };
+    fetchHistory();
 
     return () => {
       unsubscribeSettings();
       unsubscribeProducts();
-      unsubscribeHistory();
     };
   }, [user]);
-
-  // Cross-tab local sync (Zero-cost, saves quota)
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === `stockDraft_${user?.uid}` && e.newValue) {
-        try {
-          const cloudData = JSON.parse(e.newValue);
-          // Only update if we don't have local changes to avoid overwriting current work
-          if (!isLocalChange.current) {
-            setEntries(cloudData.entries);
-            if (cloudData.customColumns) setCustomColumns(cloudData.customColumns);
-          }
-        } catch (err) {
-          console.error('Failed to parse storage sync:', err);
-        }
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [user?.uid]);
 
   // Collaborative Draft (Live Sync & Restore)
   useEffect(() => {
@@ -237,6 +242,14 @@ export default function StockControl() {
                Object.keys(loadedEntries).forEach(id => {
                  loadedEntries[id].production = 0;
                  loadedEntries[id].qtySold = 0;
+                 loadedEntries[id].maxProduction = 0;
+               });
+            } else {
+               // Ensure maxProduction is synced with current production on load for today
+               Object.keys(loadedEntries).forEach(id => {
+                 if (loadedEntries[id].maxProduction === undefined) {
+                   loadedEntries[id].maxProduction = loadedEntries[id].production || 0;
+                 }
                });
             }
           }
@@ -258,11 +271,14 @@ export default function StockControl() {
             Object.keys(data.entries).forEach(id => {
               // Merge: favor existing local entries if they exist and we haven't saved to cloud yet
               if (!loadedEntries[id]) {
-                loadedEntries[id] = data.entries[id];
+                loadedEntries[id] = { ...data.entries[id] };
                 // Reset daily inputs if cloud draft is old
                 if (cloudDraftDate && cloudDraftDate !== todayStr) {
                   loadedEntries[id].production = 0;
                   loadedEntries[id].qtySold = 0;
+                  loadedEntries[id].maxProduction = 0;
+                } else if (loadedEntries[id].maxProduction === undefined) {
+                  loadedEntries[id].maxProduction = loadedEntries[id].production || 0;
                 }
               }
             });
@@ -296,12 +312,6 @@ export default function StockControl() {
         customColumns,
         timestamp: Date.now()
       }));
-      
-      // Notify other tabs
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: `stockDraft_${user.uid}`,
-        newValue: localStorage.getItem(`stockDraft_${user.uid}`)
-      }));
     } catch (e) {
       console.error('Failed to save to localStorage:', e);
     }
@@ -316,9 +326,31 @@ export default function StockControl() {
         if (isLocalChange.current) return;
 
         try {
-          const localData = JSON.parse(e.newValue);
-          if (localData.entries) setEntries(localData.entries);
-          if (localData.customColumns) setCustomColumns(localData.customColumns);
+          const incomingData = JSON.parse(e.newValue);
+          const incomingEntries = incomingData.entries || {};
+          
+          setEntries(prev => {
+            const merged = { ...prev };
+            let hasChanges = false;
+            
+            Object.keys(incomingEntries).forEach(id => {
+              if (JSON.stringify(prev[id]) !== JSON.stringify(incomingEntries[id])) {
+                merged[id] = incomingEntries[id];
+                hasChanges = true;
+              }
+            });
+            
+            return hasChanges ? merged : prev;
+          });
+          
+          if (incomingData.customColumns) {
+             setCustomColumns(prev => {
+               if (JSON.stringify(prev) !== JSON.stringify(incomingData.customColumns)) {
+                 return incomingData.customColumns;
+               }
+               return prev;
+             });
+          }
         } catch (err) {
           console.error('Failed to parse storage sync:', err);
         }
@@ -351,7 +383,11 @@ export default function StockControl() {
       localStorage.setItem(`lastSyncedEntries_${user.uid}`, JSON.stringify(entries));
       localStorage.setItem(`lastColumns_${user.uid}`, customColumns.join(','));
 
-      isLocalChange.current = false;
+      setTimeout(() => {
+        isLocalChange.current = false;
+        setLoading(false);
+      }, 1000);
+
       setQuotaExceeded(false);
       toast.success('Sync Successful: Cloud draft updated');
     } catch (error: any) {
@@ -405,6 +441,7 @@ export default function StockControl() {
         productId: product.id,
         production: 0,
         qtySold: 0,
+        maxProduction: 0,
         price: entries[product.id]?.price || 0,
         preparedStock: product.currentStock,
         customFields: Object.keys(entries[product.id]?.customFields || {}).reduce((acc, col) => ({...acc, [col]: ''}), {})
@@ -426,31 +463,32 @@ export default function StockControl() {
     isLocalChange.current = true;
 
     setEntries(prev => {
-      const currentEntry = prev[productId] || {
+      const entry = prev[productId] || {
         productId,
         production: 0,
         qtySold: 0,
-        price: product?.price || 0,
-        preparedStock: product?.currentStock || 0,
+        maxProduction: 0,
+        price: Number(product?.price) || 0,
+        preparedStock: Number(product?.currentStock) || 0,
         unitType: 'piece',
         customFields: {}
       };
-      let newPreparedStock = currentEntry.preparedStock;
+      
+      const currentEntry = { ...entry };
+      let newFieldValue = numValue === '' ? 0 : numValue;
+      
+      const updatedEntry = {
+        ...currentEntry,
+        [field]: newFieldValue
+      };
 
       if (field === 'production') {
-        const diff = Number(numValue) - currentEntry.production;
-        newPreparedStock = Math.max(0, newPreparedStock + diff);
-      } else if (field === 'preparedStock') {
-        newPreparedStock = Number(numValue);
+        updatedEntry.maxProduction = Math.max(Number(currentEntry.maxProduction || 0), Number(newFieldValue));
       }
 
       return {
         ...prev,
-        [productId]: {
-          ...currentEntry,
-          [field]: numValue,
-          preparedStock: newPreparedStock
-        }
+        [productId]: updatedEntry
       };
     });
   };
@@ -488,6 +526,7 @@ export default function StockControl() {
         productId,
         production: 0,
         qtySold: 0,
+        maxProduction: 0,
         price: 0,
         preparedStock: products.find(p => p.id === productId)?.currentStock || 0,
         customFields: {}
@@ -584,33 +623,30 @@ export default function StockControl() {
     recordHistory(`Quick add to ${product.name}: ${prodAmount} prod, ${soldAmount} sold`);
     isLocalChange.current = true;
 
-    setEntries(prev => {
-      const currentEntry = prev[quickEntryProductId] || { 
-        productId: quickEntryProductId, 
-        production: 0, 
-        qtySold: 0, 
-        price: product.price || 0,
-        preparedStock: product.currentStock || 0,
-        customFields: {} 
-      };
+      setEntries(prev => {
+        const currentEntry = prev[quickEntryProductId] || { 
+          productId: quickEntryProductId, 
+          production: 0, 
+          qtySold: 0, 
+          maxProduction: 0,
+          price: product.price || 0,
+          preparedStock: product.currentStock || 0,
+          customFields: {} 
+        };
 
-      const newProd = currentEntry.production + prodAmount;
-      const newSold = currentEntry.qtySold + soldAmount;
-      
-      // Calculate new preparedStock based on production change
-      // Since we are adding prodAmount, the diff is simply prodAmount
-      const newPreparedStock = Math.max(0, currentEntry.preparedStock + prodAmount);
-
-      return {
-        ...prev,
-        [quickEntryProductId]: {
-          ...currentEntry,
-          production: newProd,
-          qtySold: newSold,
-          preparedStock: newPreparedStock
-        }
-      };
-    });
+        const newProd = (Number(currentEntry.production) || 0) + prodAmount;
+        const newSold = (Number(currentEntry.qtySold) || 0) + soldAmount;
+        
+        return {
+          ...prev,
+          [quickEntryProductId]: {
+            ...currentEntry,
+            production: newProd,
+            qtySold: newSold,
+            maxProduction: Math.max(Number(currentEntry.maxProduction || 0), newProd)
+          }
+        };
+      });
     
     toast.success(`Updated ${product.name}: +${prodAmount} Prod, +${soldAmount} Sold`);
     
@@ -675,18 +711,26 @@ export default function StockControl() {
         
         const lastCommitted = lastCommittedEntries[productId];
         const productRef = doc(db, 'products', productId);
-        // Important: newStock is calculated based on current UI numbers
-        const newStock = (entry.preparedStock || 0) - (entry.qtySold || 0);
+        // Explicit calculation for newStock: Base + Prod - Sold
+        const entryProd = Number(entry.maxProduction || entry.production) || 0;
+        const entrySold = Number(entry.qtySold) || 0;
+        const entryPrep = entry.preparedStock !== undefined ? (Number(entry.preparedStock) || 0) : (Number(product.currentStock) || 0);
+        
+        const newStock = entryPrep + entryProd - entrySold;
+
+        // Calculate available stock delta
+        // If they changed the base stock (preparedStock), we apply that same delta to availableStock
+        const preparedStockDiff = entryPrep - product.currentStock;
 
         // 1. Log Production (Consolidated per day per product)
-        // Skip if quantity matches what we already saved to the cloud successfully for this session
-        if (entry.production > 0 && entry.production !== lastCommitted?.production) {
+        // Use entryProd (maxProduction) to ensure consistency with the stock update
+        if (entryProd > 0 && entryProd !== lastCommitted?.production) {
           const productionId = `${dayId}_${productId}`;
           const productionRef = doc(db, 'production', productionId);
           batch.set(productionRef, {
             productId,
             productName: product.name,
-            quantity: entry.production,
+            quantity: entryProd,
             date: now,
             addedBy: user.uid
           });
@@ -694,14 +738,14 @@ export default function StockControl() {
         }
 
         // 2. Log Sale (Consolidated per day per product)
-        if (entry.qtySold > 0 && entry.qtySold !== lastCommitted?.qtySold) {
+        if (entrySold > 0 && entrySold !== lastCommitted?.qtySold) {
           const saleId = `${dayId}_${productId}`;
           const saleRef = doc(db, 'sales', saleId);
-          const total = entry.qtySold * entry.price;
+          const total = entrySold * entry.price;
           batch.set(saleRef, {
             productId,
             productName: product.name,
-            quantity: entry.qtySold,
+            quantity: entrySold,
             price: Number(entry.price) || 0,
             total: total,
             date: now,
@@ -716,8 +760,12 @@ export default function StockControl() {
         const hasCustomFieldChange = JSON.stringify(entry.customFields || {}) !== JSON.stringify(product.customFields || {});
 
         if (hasStockChange || hasPriceChange || hasCustomFieldChange) {
+          // Fix: include entryProd in availableStock update to maintain parity with currentStock
+          const updatedAvailableStock = Math.max(0, (product.availableStock || 0) + preparedStockDiff + entryProd - entrySold);
+          
           batch.update(productRef, { 
             currentStock: newStock,
+            availableStock: updatedAvailableStock,
             price: Number(entry.price) || 0,
             customFields: entry.customFields || {}
           });
@@ -736,9 +784,10 @@ export default function StockControl() {
             const e = entries[pId];
             const product = products.find(p => p.id === pId);
             if (!e || !product) return null; // Only save existing products
+            const eProd = Number(e.maxProduction || e.production) || 0;
             return {
               productId: e.productId,
-              production: e.production || 0,
+              production: eProd,
               qtySold: e.qtySold || 0,
               price: e.price || 0,
               preparedStock: e.preparedStock || 0,
@@ -753,21 +802,44 @@ export default function StockControl() {
 
         await batch.commit();
         
+        // CRITICAL: After saving to the cloud, we reset production and sold counts
+        // because they are now baked into the product's "currentStock" (which becomes the new "preparedStock")
+        const resetEntries: Record<string, StockEntry> = {};
+        Object.keys(entries).forEach(pId => {
+          const e = entries[pId];
+          const product = products.find(p => p.id === pId);
+          if (!product) return;
+          
+          const entryProd = Number(e.maxProduction || e.production) || 0;
+          const entrySold = Number(e.qtySold) || 0;
+          const entryPrep = e.preparedStock !== undefined ? (Number(e.preparedStock) || 0) : (Number(product.currentStock) || 0);
+          
+          const calculatedNewStock = entryPrep + entryProd - entrySold;
+          resetEntries[pId] = {
+            ...e,
+            production: 0,
+            qtySold: 0,
+            maxProduction: 0,
+            preparedStock: calculatedNewStock 
+          };
+        });
+
+        setEntries(resetEntries);
+        setLastCommittedEntries(JSON.parse(JSON.stringify(resetEntries)));
+
         // Also update the cloud draft so other tabs/devices see the new state
         const draftRef = doc(db, 'settings', 'stockControlDraft');
         await setDoc(draftRef, {
-          entries,
+          entries: resetEntries,
           customColumns,
           lastUpdated: Timestamp.now(),
           updatedBy: user.uid
         }, { merge: true });
 
-        setLastCommittedEntries(JSON.parse(JSON.stringify(entries))); // Track what is now in cloud
-        
-        localStorage.setItem(`lastSyncedEntries_${user.uid}`, JSON.stringify(entries));
+        localStorage.setItem(`lastSyncedEntries_${user.uid}`, JSON.stringify(resetEntries));
         localStorage.setItem(`lastColumns_${user.uid}`, customColumns.join(','));
 
-        toast.success('Stock control data saved successfully');
+        toast.success('Stock control data saved and sheet reset for new entries');
       } else {
         toast.info('No new changes to save');
       }
@@ -799,14 +871,18 @@ export default function StockControl() {
     const header = `Product,Prepared Stock,Production,Qty Sold,Price,Revenue,New Prepared Stock,Status${customHeaders}\n`;
     
     const rows = products.map(p => {
-      const entry = entries[p.id] || { production: 0, qtySold: 0, price: 0, preparedStock: p.currentStock, unitType: 'piece', customFields: {} };
-      const newStock = entry.preparedStock - entry.qtySold;
-      const revenue = entry.qtySold * entry.price;
+      const entry = entries[p.id] || { production: 0, qtySold: 0, maxProduction: 0, price: 0, preparedStock: p.currentStock, unitType: 'piece', customFields: {} };
+      const entryProd = Number(entry.maxProduction || entry.production) || 0;
+      const entrySold = Number(entry.qtySold) || 0;
+      const entryPrep = entry.preparedStock !== undefined ? (Number(entry.preparedStock) || 0) : (Number(p.currentStock) || 0);
+      
+      const newStock = entryPrep + entryProd - entrySold;
+      const revenue = entrySold * (entry.price || p.price || 0);
       const status = newStock <= p.minStockLevel ? "Low Stock" : "In Stock";
       const customData = customColumns.map(c => `"${entry.customFields[c] || ''}"`).join(',');
       const customDataStr = customData ? `,${customData}` : '';
       
-      return `"${p.name}",${entry.preparedStock},${entry.production},${entry.qtySold},${entry.price},${revenue},${newStock},"${status}"${customDataStr}`;
+      return `"${p.name}",${entryPrep},${entryProd},${entrySold},${entry.price},${revenue},${newStock},"${status}"${customDataStr}`;
     }).join("\n");
 
     const content = `MUSA TRADERS - STOCK CONTROL SHEET\nDate: ${dateStr}\nDay: ${dayStr}\nTime: ${timeStr}\n\n${header}${rows}`;
@@ -863,7 +939,13 @@ export default function StockControl() {
           <Button 
             variant="outline" 
             className={cn("flex-1 md:flex-none gap-2 h-11 md:h-10", showDetailedStock ? "border-green-600 text-green-700" : "border-slate-300 text-slate-500")}
-            onClick={() => setShowDetailedStock(!showDetailedStock)}
+            onClick={() => {
+              if (isAdminUser || user?.email === 't6068422@gmail.com') {
+                setShowDetailedStock(!showDetailedStock);
+              } else {
+                toast.error('Only Admin can toggle Stock Column visibility');
+              }
+            }}
           >
             {showDetailedStock ? <Eye className="w-4 h-4" /> : <Package className="w-4 h-4 opacity-50" />}
             <span className="hidden sm:inline">{showDetailedStock ? 'Stock Column ON' : 'Stock Column OFF'}</span>
@@ -1069,13 +1151,18 @@ export default function StockControl() {
                     const entry = entries[product.id] || { 
                       production: 0, 
                       qtySold: 0, 
+                      maxProduction: 0,
                       price: product.price || 0, 
-                      preparedStock: product.currentStock, 
+                      preparedStock: product.currentStock || 0, 
                       unitType: 'piece' as 'ctn' | 'piece',
                       customFields: product.customFields || {} 
                     };
-                    const newStock = entry.preparedStock - entry.qtySold;
-                    const revenue = entry.qtySold * entry.price;
+                    const entryProd = Number(entry.maxProduction || entry.production) || 0;
+                    const entrySold = Number(entry.qtySold) || 0;
+                    const entryPrep = entry.preparedStock !== undefined ? (Number(entry.preparedStock) || 0) : (Number(product.currentStock) || 0);
+                    
+                    const newStock = entryPrep + entryProd - entrySold;
+                    const revenue = entrySold * entry.price;
                     const isLowStock = newStock <= product.minStockLevel;
                     
                     return (
@@ -1109,7 +1196,13 @@ export default function StockControl() {
                               inputMode="decimal"
                               className="w-20 mx-auto text-center border-none bg-transparent focus-visible:ring-0 h-10 md:h-8 font-bold text-blue-700"
                               value={entry.preparedStock}
-                              onChange={(e) => handleEntryChange(product.id, 'preparedStock', e.target.value)}
+                              onChange={(e) => {
+                                if (isAdminUser || user?.email === 't6068422@gmail.com') {
+                                  handleEntryChange(product.id, 'preparedStock', e.target.value);
+                                } else {
+                                  toast.error('Only Admin can edit Base Stock');
+                                }
+                              }}
                             />
                           </TableCell>
                         )}
@@ -1188,23 +1281,31 @@ export default function StockControl() {
                     <TableCell className="sticky left-0 bg-green-800 z-10 border-r border-white/20 text-right px-4 uppercase text-[10px] tracking-widest min-w-[150px]">
                       Grand Total
                     </TableCell>
-                    <TableCell className="text-center border-r border-white/20">
+                    <TableCell className={`text-center border-r border-white/20`}>
                       {products.reduce((sum, p) => {
-                        const entry = entries[p.id] || { preparedStock: p.currentStock, production: 0, qtySold: 0 };
-                        return sum + ((entry.preparedStock || p.currentStock) + (entry.production || 0) - (entry.qtySold || 0));
+                        const entry = entries[p.id];
+                        const prep = entry?.preparedStock !== undefined ? (Number(entry.preparedStock) || 0) : (Number(p.currentStock) || 0);
+                        const prod = Number(entry?.maxProduction || entry?.production || 0);
+                        const sold = Number(entry?.qtySold) || 0;
+                        return sum + (prep + prod - sold);
                       }, 0)}
                     </TableCell>
-                    <TableCell className="text-center border-r border-white/20">
-                      {products.reduce((sum, p) => sum + (entries[p.id]?.preparedStock || p.currentStock || 0), 0)}
-                    </TableCell>
+                    {showDetailedStock && (
+                      <TableCell className="text-center border-r border-white/20">
+                        {products.reduce((sum, p) => {
+                           const entry = entries[p.id];
+                           return sum + (entry !== undefined && entry.preparedStock !== undefined ? entry.preparedStock : (p.currentStock || 0));
+                        }, 0)}
+                      </TableCell>
+                    )}
                     <TableCell className="text-center border-r border-white/20">
                       -
                     </TableCell>
                     <TableCell className="text-center border-r border-white/20">
-                      {products.reduce((sum, p) => sum + (entries[p.id]?.production || 0), 0)}
+                      {products.reduce((sum, p) => sum + (Number(entries[p.id]?.maxProduction || entries[p.id]?.production) || 0), 0)}
                     </TableCell>
                     <TableCell className="text-center border-r border-white/20">
-                      {products.reduce((sum, p) => sum + (entries[p.id]?.qtySold || 0), 0)}
+                      {products.reduce((sum, p) => sum + (Number(entries[p.id]?.qtySold) || 0), 0)}
                     </TableCell>
                     <TableCell className="text-center border-r border-white/20">
                       -
@@ -1224,7 +1325,7 @@ export default function StockControl() {
                   <TableCell className="p-1 border-r border-green-800/30 sticky left-0 bg-background/80 backdrop-blur-sm z-10 min-w-[150px]">
                     <div className="flex gap-2 items-center px-2">
                       <Input 
-                        placeholder="Quick add..." 
+                        placeholder="Quick add product name..." 
                         value={quickAddName}
                         onChange={e => setQuickAddName(e.target.value)}
                         className="h-9 md:h-8 text-sm border-dashed border-green-800/50"
@@ -1235,34 +1336,9 @@ export default function StockControl() {
                       </Button>
                     </div>
                   </TableCell>
-                  <TableCell className="border-r border-green-800/30 bg-accent/5" />
-                  <TableCell colSpan={(showDetailedStock ? 1 : 0) + 6 + customColumns.length} className="bg-accent/5" />
-                </TableRow>
-
-                {/* Grand Total Row */}
-                <TableRow className="bg-primary/10 font-bold border-t-2 border-green-800 h-14">
-                  <TableCell className="text-right px-4 border-r border-green-800/30 sticky left-0 bg-primary/10 z-10 min-w-[150px]">
-                    <span className="text-[10px] uppercase tracking-widest text-primary font-black">Grand Total</span>
+                  <TableCell className="border-r border-green-800/30 bg-accent/5" colSpan={9 + customColumns.length}>
+                    <div className="text-[10px] text-muted-foreground italic px-2">Type a name and press Enter or click the plus icon to quickly add a product to the list.</div>
                   </TableCell>
-                  <TableCell className="border-r border-green-800/30 text-center text-primary">
-                    {filteredProducts.reduce((sum, p) => {
-                      const entry = entries[p.id] || { preparedStock: p.currentStock, production: 0, qtySold: 0 };
-                      return sum + ((entry.preparedStock || p.currentStock) + (entry.production || 0) - (entry.qtySold || 0));
-                    }, 0)}
-                  </TableCell>
-                  {showDetailedStock && <TableCell className="border-r border-green-800/30"></TableCell>}
-                  <TableCell className="border-r border-green-800/30"></TableCell>
-                  <TableCell className="text-center border-r border-green-800/30 text-primary">
-                    {filteredProducts.reduce((sum, p) => sum + (entries[p.id]?.production || 0), 0)}
-                  </TableCell>
-                  <TableCell className="text-center border-r border-green-800/30 text-primary">
-                    {filteredProducts.reduce((sum, p) => sum + (entries[p.id]?.qtySold || 0), 0)}
-                  </TableCell>
-                  <TableCell className="border-r border-green-800/30"></TableCell>
-                  <TableCell className="text-center border-r border-green-800/30 text-primary text-base">
-                    Rs. {filteredProducts.reduce((sum, p) => sum + ((entries[p.id]?.qtySold || 0) * (entries[p.id]?.price || 0)), 0).toLocaleString()}
-                  </TableCell>
-                  <TableCell colSpan={1 + customColumns.length}></TableCell>
                 </TableRow>
               </TableBody>
             </Table>

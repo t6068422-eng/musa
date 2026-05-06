@@ -74,6 +74,7 @@ export interface StockEntry {
   price: number;
   unitType?: 'ctn' | 'piece';
   preparedStock: number;
+  maxProduction?: number; // Tracks the highest production value seen that has been added to preparedStock
   customFields: Record<string, any>;
 }
 
